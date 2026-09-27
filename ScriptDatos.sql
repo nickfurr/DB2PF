@@ -257,7 +257,7 @@ BEGIN
 
         INSERT INTO Reserva (id_cliente, fecha_reserva, estado)
         VALUES (
-            v_cliente_ids(1 + MOD(i * i * 19, 3000)),
+            v_cliente_ids(1 + MOD(MOD(i * i, 3000) * 19, 3000)),
             v_fecha_reserva,
             v_estado
         ) RETURNING id_reserva INTO v_reserva_ids(i);

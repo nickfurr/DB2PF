@@ -1,0 +1,11 @@
+{
+	"servers": {
+		"io.draw/mcp": {
+			"type": "http",
+			"url": "https://mcp.draw.io/mcp",
+			"gallery": "https://api.mcp.github.com",
+			"version": "1.0.3"
+		}
+	},
+	"inputs": []
+}

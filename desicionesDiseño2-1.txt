@@ -1,0 +1,14 @@
+desicion 1: para tener la regla de diseño de las habitaciones se hace que cada reserva seleccione varias 
+            habitaciones, se lograria que cada habitacion tenga una reserva establecida, pero tambien a su vez despues
+            cada habitacion tendra otras reservas, por lo que logra con una tabla intermedia ya que la relacion
+            es n:n, que sea reservaHabitacion que permita que una habitacion este en varias reservas (en un tiempo especifico)
+            y a su vez estas reservas tengan varias habitaciones.
+
+            para poder definir la regla de negocio de disponibilidad de habitacion es revizar las reservas que estan en estado
+            confirmado, que sibnifica que las habitaciones estan ocupadas en el rango de fechas determinados por el ckeck in y checkout
+            permitiendo hacer una especie de calendario de que habitaciones estan ocupadas y en que tiempo permitiendo destacar
+            periodos de disponibilidad si e dado caso de uso de alguna aplicacion implementan dada funcion
+
+desicion 2: para poder determinar el precio entre tarifas se lograria mediante un dato precalculado que itere entre cada dia por cada 
+            tarifa y asi poder determinar el preico final entre tiempos, asi logrando que exista precios actualizados entre temporadas
+            
