@@ -6,7 +6,8 @@ El presente repositorio contiene la implementación del modelo de datos, los scr
 
 ## Contenido
 
-- Script de definición de datos (DDL)
-- Script de carga masiva de información
-- Documento de entrega con el modelo conceptual y decisiones de diseño
-- Diagrama entidad-relación del sistema
+- Script de definición de datos (DDL): [ScriptDDL.sql](ScriptDDL.sql)
+- Script de carga masiva de información: [ScriptDatos.sql](ScriptDatos.sql)
+- Script de consultas analíticas avanzadas: [ScriptConsultas.sql](ScriptConsultas.sql)
+- Documento de entrega con el modelo conceptual y decisiones de diseño: [Entrega1.md](Entrega1.md)
+- Diagrama entidad-relación del sistema: [diagrama.png](diagrama.png)

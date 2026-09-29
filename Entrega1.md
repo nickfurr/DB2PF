@@ -142,9 +142,8 @@ Archivos incluidos en el repositorio:
 
 - [ScriptDDL.sql](ScriptDDL.sql): creación de tablas y restricciones.
 - [ScriptDatos.sql](ScriptDatos.sql): generación de datos mediante PL/SQL.
+- [ScriptConsultas.sql](ScriptConsultas.sql): las siete consultas analíticas obligatorias comentadas y numeradas.
 - [diagrama.png](diagrama.png): imagen del modelo entidad-relación.
-
-> [Nota de redacción: falta confirmar si se incluirán descripciones adicionales del contenido de los scripts en la versión final del documento.]
 
 ---
 
@@ -171,8 +170,6 @@ El script de carga está preparado para generar los volúmenes mínimos solicita
 
 Los datos se distribuyen de forma desigual entre alojamientos, municipios y habitaciones para que las consultas analíticas reflejen situaciones reales del mercado.
 
-> [Nota de redacción: falta definir si esta sección será acompañada por una justificación adicional del diseño de carga y del volumen propuesto.]
-
 ---
 
 ## 7. Lista de verificación de la Entrega 1
@@ -183,9 +180,7 @@ Los datos se distribuyen de forma desigual entre alojamientos, municipios y habi
 - [x] Explicación de las dos decisiones de diseño principales.
 - [x] Script DDL con tablas y restricciones.
 - [x] Script PL/SQL de carga de datos.
-- [ ] Script independiente con las siete consultas analíticas solicitadas: PIVOT, ROLLUP o CUBE con GROUPING, RANK, LAG, variables de enlace, UNPIVOT y consulta libre.
-
-> [Nota de redacción: falta completar la redacción final de la última sección una vez se confirme el estado definitivo de la entrega y las consultas analíticas pendientes.]
+- [x] Script independiente con las siete consultas analíticas solicitadas: PIVOT, ROLLUP o CUBE con GROUPING, RANK, LAG, variables de enlace, UNPIVOT y consulta libre ([ScriptConsultas.sql](ScriptConsultas.sql)).
 
 ---
 
