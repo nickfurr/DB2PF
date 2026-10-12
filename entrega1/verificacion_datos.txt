@@ -1,0 +1,65 @@
+=== TABLAS Y CONTEOS ===
+
+TABLA		    REGISTROS	ESPERADO
+------------------ ---------- ----------
+ALOJAMIENTO		   60	      60
+CLIENTE 		 3000	    3000
+HABITACION		  400	     400
+MUNICIPIO		   12	      12
+PAGO			25000	   25000
+RESENA			10000	   10000
+RESERVA 		25000	   25000
+RESERVA_HABITACION	30000	   30000
+RESERVA_SERVICIO	40000	   40000
+SERVICIO		   30	      30
+TARIFA			 2400	    2400
+TEMPORADA		    6	       6
+TIPO_ALOJAMIENTO	    4	       4
+USUARIO_SISTEMA 	   10	      10
+
+14 rows selected.
+
+=== ESTADOS DE RESERVA ===
+
+ESTADO							TOTAL
+-------------------------------------------------- ----------
+cancelada						 5000
+completada						10000
+confirmada						 7500
+pendiente						 2500
+
+4 rows selected.
+
+=== ESTADOS DE PAGO ===
+
+ESTADO							TOTAL
+-------------------------------------------------- ----------
+exitoso 						17500
+pendiente						 2500
+reembolsado						 5000
+
+3 rows selected.
+
+=== RELACIONES SIN PADRE ===
+
+CASO				TOTAL
+-------------------------- ----------
+RESERVA_SIN_CLIENTE		    0
+HABITACION_SIN_ALOJAMIENTO	    0
+TARIFA_SIN_HABITACION		    0
+TARIFA_SIN_TEMPORADA		    0
+PAGO_SIN_RESERVA		    0
+RESENA_SIN_RESERVA		    0
+
+6 rows selected.
+
+=== DUPLICADOS CLAVE ===
+
+CASO				  TOTAL
+---------------------------- ----------
+CLIENTE_DOCUMENTO_DUPLICADO	      0
+RESERVA_CON_MAS_DE_UN_PAGO	      0
+RESERVA_CON_RESENA_DUPLICADA	      0
+
+3 rows selected.
+
