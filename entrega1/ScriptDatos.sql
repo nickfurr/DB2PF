@@ -1,6 +1,6 @@
 -- Generador de datos para el proyecto TurismoUQ.
 -- Ejecutar despues de ScriptDDL.sql en Oracle 12c o superior.
--- El script esta pensado para ejecutarse una sola vez sobre tablas vacias.
+-- El script esta pensado para ejecutarse una sola vez sobre tablas vacias. cabagna
 
 SET SERVEROUTPUT ON;
 
@@ -184,7 +184,7 @@ BEGIN
                 WHEN 0 THEN 'sencilla'
                 WHEN 1 THEN 'doble'
                 WHEN 2 THEN 'suite'
-                ELSE 'cabaña'
+                ELSE 'cabagna'
             END,
             'Habitacion con distribucion y capacidad variable'
         ) RETURNING id_habitacion INTO v_habitacion_ids(i);
