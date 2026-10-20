@@ -16,8 +16,11 @@ CREATE TABLE Temporada (
     nombre VARCHAR2(100) NOT NULL,
     tipo VARCHAR2(50) NOT NULL,
     fecha_inicio DATE NOT NULL,
-    fecha_fin DATE NOT NULL
+    fecha_fin DATE NOT NULL,
+    sobrecostoTemporada NUMBER(3,2) DEFAULT 0 NOT NULL,
+    CONSTRAINT chk_temporada_sobrecosto CHECK (sobrecostoTemporada BETWEEN 0 AND 1)
 );
+COMMENT ON COLUMN Temporada.sobrecostoTemporada IS 'Fracción de sobrecosto de la temporada (0.30 = 30%)';
 COMMENT ON TABLE Temporada IS 'Periodos de temporada turística (alta, media, baja)';
 
 CREATE TABLE Cliente (
