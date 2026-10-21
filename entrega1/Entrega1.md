@@ -79,7 +79,7 @@ Las relaciones de varios a varios del negocio se resuelven mediante entidades as
 
 3. **No duplicidad de habitaciones.** Dos habitaciones del mismo alojamiento no pueden compartir el mismo número. La identificación del número de habitación es relevante dentro del contexto del alojamiento.
 
-4. **Tarifa por temporada.** Cada combinación de habitación y temporada debe tener una tarifa nocturna. El valor base no se calcula como un porcentaje fijo global, dado que cada alojamiento puede definir precios distintos. La temporada también registra `sobrecostoTemporada` como una fracción entre 0 y 1; por ejemplo, `0.30` representa un sobrecosto del 30 % sobre la tarifa.
+4. **Tarifa por temporada.** Cada combinación de habitación y temporada debe tener una tarifa nocturna. El valor no se calcula como un porcentaje fijo global, dado que cada alojamiento puede definir precios distintos.
 
 5. **Estadías entre temporadas.** Una estadía que atraviesa dos o más temporadas debe calcularse noche por noche aplicando la tarifa vigente para cada fecha, en lugar de usar una sola tarifa para toda la reserva.
 
@@ -119,7 +119,7 @@ La disponibilidad se determina revisando las reservas en estado confirmada y det
 
 El precio de una habitación depende de la temporada y no existe una tarifa base única para todos los periodos. Por ello, se utiliza la entidad asociativa TARIFA, que relaciona cada HABITACION con cada TEMPORADA y almacena el valor de una noche para esa combinación.
 
-Una estadía puede iniciar en una temporada y terminar en otra. Por ejemplo, una reserva del 20 al 26 de diciembre puede incluir noches de temporada media y noches de temporada alta. El valor correcto se obtiene recorriendo cada noche del intervalo, identificando la temporada vigente y sumando la tarifa correspondiente de la habitación para esa fecha, con su sobrecosto: `valor_noche * (1 + sobrecostoTemporada)`.
+Una estadía puede iniciar en una temporada y terminar en otra. Por ejemplo, una reserva del 20 al 26 de diciembre puede incluir noches de temporada media y noches de temporada alta. El valor correcto se obtiene recorriendo cada noche del intervalo, identificando la temporada vigente y sumando la tarifa correspondiente de la habitación para esa fecha.
 
 El atributo precio_noche_calculado de RESERVA_HABITACION conserva el valor aplicado a la reserva. Este dato permite mantener el precio histórico utilizado en la operación, aunque las tarifas futuras sean modificadas. La función fn_valor_estadia, prevista para la Entrega 2, automatizará el cálculo para estadías que atraviesen una o varias temporadas.
 

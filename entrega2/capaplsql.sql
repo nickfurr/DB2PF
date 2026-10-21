@@ -1,5 +1,3 @@
---funcion para obtener el valor de la estadia que pasa por fechas especificas
-
 CREATE OR REPLACE FUNCTION fn_valor_estadia (
     p_id_habitacion IN NUMBER,
     p_fecha_in      IN DATE,
@@ -11,7 +9,7 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20001, 'La fecha de checkout debe ser posterior al checkin.');
     END IF;
 
-    SELECT NVL(SUM(tar.valor_noche * (1 + temp.sobrecostoTemporada)), 0)
+    SELECT NVL(SUM(tar.valor_noche), 0)
     INTO v_total
     FROM (
         SELECT TRUNC(p_fecha_in) + LEVEL - 1 AS noche

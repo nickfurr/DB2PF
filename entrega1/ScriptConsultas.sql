@@ -55,7 +55,7 @@ SELECT
          WHEN GROUPING(ta.nombre) = 1 THEN '--- Todas las Temporadas ---' 
          ELSE t.tipo END AS temporada,
     COUNT(DISTINCT r.id_reserva) AS total_reservas,
-    SUM(tar.valor_noche * (1 + t.sobrecostoTemporada)) AS ingresos_hospedaje,
+    SUM(tar.valor_noche) AS ingresos_hospedaje,
     GROUPING(m.nombre) AS grp_mun,
     GROUPING(ta.nombre) AS grp_tipo,
     GROUPING(t.tipo) AS grp_temp
