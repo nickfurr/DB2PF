@@ -100,6 +100,19 @@ CREATE TABLE Tarifa (
 );
 COMMENT ON TABLE Tarifa IS 'Precios de las habitaciones dependiendo de la temporada';
 
+CREATE TABLE Auditoria_Tarifa (
+    id_auditoria NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_tarifa NUMBER NOT NULL,
+    usuario VARCHAR2(128) NOT NULL,
+    fecha_cambio TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    operacion VARCHAR2(10) NOT NULL,
+    valor_anterior NUMBER,
+    valor_nuevo NUMBER,
+    CONSTRAINT chk_auditoria_tarifa_operacion
+        CHECK (operacion IN ('INSERT', 'UPDATE', 'DELETE'))
+);
+COMMENT ON TABLE Auditoria_Tarifa IS 'Auditoria de cambios realizados sobre las tarifas';
+
 CREATE TABLE Reserva_Habitacion (
     id_reserva_habitacion NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_reserva NUMBER NOT NULL,
