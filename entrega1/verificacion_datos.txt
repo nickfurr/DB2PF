@@ -1,65 +1,103 @@
-=== TABLAS Y CONTEOS ===
 
-TABLA		    REGISTROS	ESPERADO
------------------- ---------- ----------
-ALOJAMIENTO		   60	      60
-CLIENTE 		 3000	    3000
-HABITACION		  400	     400
-MUNICIPIO		   12	      12
-PAGO			25000	   25000
-RESENA			10000	   10000
-RESERVA 		25000	   25000
-RESERVA_HABITACION	30000	   30000
-RESERVA_SERVICIO	40000	   40000
-SERVICIO		   30	      30
-TARIFA			 2400	    2400
-TEMPORADA		    6	       6
-TIPO_ALOJAMIENTO	    4	       4
-USUARIO_SISTEMA 	   10	      10
+FECHA
+-----------------------------------------
+Verificacion generada el 2026-10-25 16:05
 
-14 rows selected.
+1 fila seleccionada.
 
-=== ESTADOS DE RESERVA ===
 
-ESTADO							TOTAL
+TABLA                 REGISTROS     MINIMO
+-------------------- ---------- ----------
+MUNICIPIO                    12         12
+TIPO_ALOJAMIENTO              4          4
+ALOJAMIENTO                  60         60
+HABITACION                  585        400
+TEMPORADA                    65          6
+TARIFA                    38025      38025
+CLIENTE                    3000       3000
+RESERVA                   25000      25000
+RESERVA_HABITACION        28937      25000
+PAGO                      38447      25000
+SERVICIO                    127         30
+RESERVA_SERVICIO          42534      40000
+RESENA                    10634       8165
+USUARIO_SISTEMA              10         10
+
+14 filas seleccionadas.
+
+
+CONTROL                                                      TOTAL
+------------------------------------------------------- ----------
+Solapes entre reservas confirmadas                               0
+Solapes entre reservas no canceladas                             0
+Habitaciones que nunca se reservan                               0
+Servicios cobrados en otro alojamiento                           0
+Reservas con habitaciones de varios alojamientos                 0
+Precio por noche distinto al calculado con TARIFA                0
+Precio de servicio distinto al del catalogo                      0
+Dias 2024-2026 sin temporada                                     0
+Temporadas que se solapan                                        0
+Resenas de reservas no completadas                               0
+Reservas sin ningun pago                                         0
+Completadas cuyos pagos exitosos no cubren el total              0
+Reembolsos con 5 dias o menos de anticipacion                    0
+Check-in anterior a la fecha de reserva                          0
+
+14 filas seleccionadas.
+
+
+ESTADO                                               RESERVAS
 -------------------------------------------------- ----------
-cancelada						 5000
-completada						10000
-confirmada						 7500
-pendiente						 2500
+completada                                              20412
+cancelada                                                3082
+confirmada                                               1091
+pendiente                                                 415
 
-4 rows selected.
+4 filas seleccionadas.
 
-=== ESTADOS DE PAGO ===
 
-ESTADO							TOTAL
+ESTADO                                                  PAGOS
 -------------------------------------------------- ----------
-exitoso 						17500
-pendiente						 2500
-reembolsado						 5000
+exitoso                                                 33817
+reembolsado                                              2387
+fallido                                                  1241
+pendiente                                                1002
 
-3 rows selected.
+4 filas seleccionadas.
 
-=== RELACIONES SIN PADRE ===
 
-CASO				TOTAL
--------------------------- ----------
-RESERVA_SIN_CLIENTE		    0
-HABITACION_SIN_ALOJAMIENTO	    0
-TARIFA_SIN_HABITACION		    0
-TARIFA_SIN_TEMPORADA		    0
-PAGO_SIN_RESERVA		    0
-RESENA_SIN_RESERVA		    0
+INDICADOR                                        TOTAL
+------------------------------------------- ----------
+Reservas con varias habitaciones                  2717
+Reservas con mas de un pago                      12895
+Reservas con linea que llega un dia despues        694
 
-6 rows selected.
+3 filas seleccionadas.
 
-=== DUPLICADOS CLAVE ===
 
-CASO				  TOTAL
----------------------------- ----------
-CLIENTE_DOCUMENTO_DUPLICADO	      0
-RESERVA_CON_MAS_DE_UN_PAGO	      0
-RESERVA_CON_RESENA_DUPLICADA	      0
+TIPO                                               TEMPORADAS
+-------------------------------------------------- ----------
+alta                                                       31
+baja                                                       20
+media                                                      14
 
-3 rows selected.
+3 filas seleccionadas.
+
+
+MUNICIPIO                                                                                            ALOJAMIENTOS HABITACIONES   RESERVAS
+---------------------------------------------------------------------------------------------------- ------------ ------------ ----------
+Armenia                                                                                                         9          164       6114
+Salento                                                                                                        10           91       5887
+Montenegro                                                                                                      8           65       3168
+Filandia                                                                                                        7           60       3031
+Quimbaya                                                                                                        6           52       2282
+Calarca                                                                                                         5           57       1673
+Circasia                                                                                                        4           18       1104
+La Tebaida                                                                                                      4           37        798
+Buenavista                                                                                                      2            8        305
+Cordoba                                                                                                         2           11        289
+Pijao                                                                                                           2           17        251
+Genova                                                                                                          1            5         98
+
+12 filas seleccionadas.
 
