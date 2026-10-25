@@ -1,5 +1,18 @@
 -- ENTREGA 2 - TurismoUQ
 -- 01. Paquete: funcion, procedimiento y cursor de proceso masivo.
+--
+-- Codigos de error propios del paquete (RAISE_APPLICATION_ERROR):
+--   fn_valor_estadia
+--     -20000  Parametros nulos.
+--     -20001  La fecha de checkout no es posterior al checkin.
+--     -20002  Una noche de la estadia no pertenece a ninguna temporada.
+--     -20003  La habitacion no existe.
+--     -20005  La habitacion no tiene tarifa para la temporada de una noche.
+--     -20006  Una noche cae en dos temporadas (temporadas solapadas).
+--   sp_crear_reserva
+--     -20010 .. -20014 (ver el procedimiento).
+--   sp_liquidacion_mensual
+--     -20015  Ano o mes invalidos.
 
 SET SERVEROUTPUT ON
 SET LINESIZE 200
@@ -8,11 +21,23 @@ SET PAGESIZE 100
 -- Especificacion del paquete
 CREATE OR REPLACE PACKAGE pkg_turismo IS
 
+    -- Valor de una estadia: suma, noche por noche, la tarifa de la habitacion
+    -- en la temporada a la que pertenece cada noche. La noche del checkout no
+    -- se cobra. Una estadia que atraviesa varias temporadas paga cada noche al
+    -- precio de su temporada.
     FUNCTION fn_valor_estadia (
         p_id_habitacion IN Habitacion.id_habitacion%TYPE,
         p_fecha_in      IN DATE,
         p_fecha_out     IN DATE
     ) RETURN NUMBER;
+
+    -- Muestra con DBMS_OUTPUT el detalle de fn_valor_estadia: cada noche con
+    -- su temporada y tarifa, y el subtotal por temporada. Sirve de evidencia.
+    PROCEDURE sp_desglose_estadia (
+        p_id_habitacion IN Habitacion.id_habitacion%TYPE,
+        p_fecha_in      IN DATE,
+        p_fecha_out     IN DATE
+    );
 
     PROCEDURE sp_crear_reserva (
         p_id_cliente         IN  Reserva.id_cliente%TYPE,
@@ -35,32 +60,138 @@ END pkg_turismo;
 -- Cuerpo del paquete
 CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
 
+    -- -------------------------------------------------------------------------
+    -- Cursor con parametros compartido por fn_valor_estadia y
+    -- sp_desglose_estadia: devuelve UNA FILA POR NOCHE de la estadia.
+    -- El calendario se genera con CONNECT BY (de checkin a checkout - 1) y se
+    -- cruza con TEMPORADA y TARIFA mediante LEFT JOIN, para que una noche sin
+    -- temporada o sin tarifa no desaparezca: llega con columnas nulas y la
+    -- funcion la detecta y la reporta como error.
+    -- -------------------------------------------------------------------------
+    CURSOR c_noches (p_hab NUMBER, p_in DATE, p_out DATE) IS
+        SELECT d.noche,
+               t.id_temporada,
+               t.nombre AS temporada,
+               t.tipo,
+               tar.valor_noche
+          FROM (SELECT TRUNC(p_in) + LEVEL - 1 AS noche
+                  FROM dual
+               CONNECT BY LEVEL <= TRUNC(p_out) - TRUNC(p_in)) d
+          LEFT JOIN Temporada t
+                 ON d.noche BETWEEN TRUNC(t.fecha_inicio) AND TRUNC(t.fecha_fin)
+          LEFT JOIN Tarifa tar
+                 ON tar.id_temporada  = t.id_temporada
+                AND tar.id_habitacion = p_hab
+         ORDER BY d.noche;
+
+    -- Validaciones comunes de los parametros de una estadia.
+    PROCEDURE validar_estadia (
+        p_id_habitacion IN NUMBER,
+        p_fecha_in      IN DATE,
+        p_fecha_out     IN DATE
+    ) IS
+        v_existe NUMBER;
+    BEGIN
+        IF p_id_habitacion IS NULL OR p_fecha_in IS NULL OR p_fecha_out IS NULL THEN
+            RAISE_APPLICATION_ERROR(-20000, 'La habitacion y las fechas de la estadia son obligatorias.');
+        END IF;
+
+        IF TRUNC(p_fecha_out) <= TRUNC(p_fecha_in) THEN
+            RAISE_APPLICATION_ERROR(-20001, 'La fecha de checkout debe ser posterior al checkin.');
+        END IF;
+
+        SELECT COUNT(*) INTO v_existe
+          FROM Habitacion
+         WHERE id_habitacion = p_id_habitacion;
+
+        IF v_existe = 0 THEN
+            RAISE_APPLICATION_ERROR(-20003, 'La habitacion ' || p_id_habitacion || ' no existe.');
+        END IF;
+    END validar_estadia;
+
+
     FUNCTION fn_valor_estadia (
         p_id_habitacion IN Habitacion.id_habitacion%TYPE,
         p_fecha_in      IN DATE,
         p_fecha_out     IN DATE
     ) RETURN NUMBER IS
-        v_total NUMBER := 0;
+        v_total       NUMBER := 0;
+        v_noche_ant   DATE;
     BEGIN
-        IF p_fecha_out <= p_fecha_in THEN
-            RAISE_APPLICATION_ERROR(-20001, 'La fecha de checkout debe ser posterior al checkin.');
-        END IF;
+        validar_estadia(p_id_habitacion, p_fecha_in, p_fecha_out);
 
-        SELECT NVL(SUM(tar.valor_noche), 0)
-          INTO v_total
-          FROM (
-                SELECT TRUNC(p_fecha_in) + LEVEL - 1 AS noche
-                  FROM DUAL
-                CONNECT BY LEVEL <= (TRUNC(p_fecha_out) - TRUNC(p_fecha_in))
-               ) d
-          JOIN Temporada temp
-            ON d.noche BETWEEN TRUNC(temp.fecha_inicio) AND TRUNC(temp.fecha_fin)
-          JOIN Tarifa tar
-            ON tar.id_temporada  = temp.id_temporada
-           AND tar.id_habitacion = p_id_habitacion;
+        -- Recorrido noche por noche: cada noche suma la tarifa de SU temporada.
+        FOR r IN c_noches(p_id_habitacion, p_fecha_in, p_fecha_out) LOOP
+
+            IF r.noche = v_noche_ant THEN
+                RAISE_APPLICATION_ERROR(-20006,
+                    'La noche ' || TO_CHAR(r.noche, 'YYYY-MM-DD') ||
+                    ' pertenece a mas de una temporada; revise TEMPORADA.');
+            END IF;
+
+            IF r.id_temporada IS NULL THEN
+                RAISE_APPLICATION_ERROR(-20002,
+                    'La noche ' || TO_CHAR(r.noche, 'YYYY-MM-DD') ||
+                    ' no pertenece a ninguna temporada definida.');
+            END IF;
+
+            IF r.valor_noche IS NULL THEN
+                RAISE_APPLICATION_ERROR(-20005,
+                    'La habitacion ' || p_id_habitacion || ' no tiene tarifa para ' ||
+                    r.temporada || ' (noche ' || TO_CHAR(r.noche, 'YYYY-MM-DD') || ').');
+            END IF;
+
+            v_total     := v_total + r.valor_noche;
+            v_noche_ant := r.noche;
+        END LOOP;
 
         RETURN v_total;
     END fn_valor_estadia;
+
+
+    PROCEDURE sp_desglose_estadia (
+        p_id_habitacion IN Habitacion.id_habitacion%TYPE,
+        p_fecha_in      IN DATE,
+        p_fecha_out     IN DATE
+    ) IS
+        v_temp_actual  Temporada.nombre%TYPE;
+        v_subtotal     NUMBER := 0;
+        v_noches_temp  PLS_INTEGER := 0;
+        v_total        NUMBER;
+
+        PROCEDURE imprimir_subtotal IS
+        BEGIN
+            IF v_temp_actual IS NOT NULL THEN
+                DBMS_OUTPUT.PUT_LINE('   Subtotal ' || v_temp_actual || ': ' || v_noches_temp ||
+                                     ' noche(s) = ' || TO_CHAR(v_subtotal, 'FM999G999G990'));
+            END IF;
+        END;
+    BEGIN
+        -- fn_valor_estadia valida todo y lanza el error si algo falta.
+        v_total := fn_valor_estadia(p_id_habitacion, p_fecha_in, p_fecha_out);
+
+        DBMS_OUTPUT.PUT_LINE('Habitacion ' || p_id_habitacion || ': ' ||
+                             TO_CHAR(p_fecha_in, 'YYYY-MM-DD') || ' -> ' ||
+                             TO_CHAR(p_fecha_out, 'YYYY-MM-DD') || ' (' ||
+                             (TRUNC(p_fecha_out) - TRUNC(p_fecha_in)) || ' noches)');
+
+        FOR r IN c_noches(p_id_habitacion, p_fecha_in, p_fecha_out) LOOP
+            IF v_temp_actual IS NULL OR r.temporada <> v_temp_actual THEN
+                imprimir_subtotal;
+                v_temp_actual := r.temporada;
+                v_subtotal    := 0;
+                v_noches_temp := 0;
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('   ' || TO_CHAR(r.noche, 'YYYY-MM-DD') || '  ' ||
+                                 RPAD(r.tipo, 6) || ' ' || RPAD(r.temporada, 45) ||
+                                 LPAD(TO_CHAR(r.valor_noche, 'FM999G999G990'), 10));
+            v_subtotal    := v_subtotal + r.valor_noche;
+            v_noches_temp := v_noches_temp + 1;
+        END LOOP;
+        imprimir_subtotal;
+
+        DBMS_OUTPUT.PUT_LINE('   TOTAL fn_valor_estadia = ' || TO_CHAR(v_total, 'FM999G999G990'));
+    END sp_desglose_estadia;
 
 
     PROCEDURE sp_crear_reserva (
@@ -149,11 +280,23 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
     END sp_crear_reserva;
 
 
+    -- -------------------------------------------------------------------------
+    -- Liquidacion mensual por alojamiento (proceso masivo con cursor explicito
+    -- con parametros: OPEN / FETCH / CLOSE).
+    --   * Hospedaje: cada estadia confirmada o completada se liquida SOLO por
+    --     las noches que caen dentro del mes, con fn_valor_estadia sobre el
+    --     tramo [max(checkin, dia 1), min(checkout, dia 1 del mes siguiente)).
+    --     Una estadia del 30/07 al 02/08 aporta 2 noches a julio y 1 a agosto,
+    --     igual que en la vista materializada de ocupacion.
+    --   * Servicios: se liquidan en el mes en que llega el huesped (primer
+    --     checkin de la reserva).
+    -- -------------------------------------------------------------------------
     PROCEDURE sp_liquidacion_mensual (
         p_anio IN NUMBER,
         p_mes  IN NUMBER
     ) IS
-        CURSOR c_aloj (p_a NUMBER, p_m NUMBER) IS
+        -- Alojamientos con al menos una noche ocupada en el mes [p_ini, p_fin)
+        CURSOR c_aloj (p_ini DATE, p_fin DATE) IS
             SELECT a.id_alojamiento,
                    a.nombre_comercial,
                    m.nombre AS municipio
@@ -166,33 +309,58 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
                      JOIN Reserva r             ON r.id_reserva     = rh.id_reserva
                     WHERE h.id_alojamiento = a.id_alojamiento
                       AND r.estado IN ('confirmada', 'completada')
-                      AND EXTRACT(YEAR  FROM rh.checkin) = p_a
-                      AND EXTRACT(MONTH FROM rh.checkin) = p_m)
-             ORDER BY a.id_alojamiento;
+                      AND rh.checkin  < p_fin
+                      AND rh.checkout > p_ini)
+             ORDER BY m.nombre, a.nombre_comercial;
 
         r_aloj       c_aloj%ROWTYPE;
+        v_ini        DATE;
+        v_fin        DATE;
+        v_noches     NUMBER;
         v_hospedaje  NUMBER;
         v_servicios  NUMBER;
-        v_total_dpto NUMBER := 0;
+        v_tot_noches NUMBER := 0;
+        v_tot_hosp   NUMBER := 0;
+        v_tot_serv   NUMBER := 0;
         v_n          NUMBER := 0;
-    BEGIN
-        DBMS_OUTPUT.PUT_LINE('== LIQUIDACION ' || LPAD(p_mes, 2, '0') || '/' || p_anio || ' ==');
 
-        OPEN c_aloj(p_anio, p_mes);
+        FUNCTION dinero (p NUMBER) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN TO_CHAR(p, 'FM999G999G999G990');
+        END;
+    BEGIN
+        IF p_anio IS NULL OR p_mes IS NULL OR p_mes NOT BETWEEN 1 AND 12 THEN
+            RAISE_APPLICATION_ERROR(-20015, 'Indique un ano y un mes entre 1 y 12.');
+        END IF;
+
+        v_ini := TO_DATE(p_anio || '-' || LPAD(p_mes, 2, '0') || '-01', 'YYYY-MM-DD');
+        v_fin := ADD_MONTHS(v_ini, 1);
+
+        DBMS_OUTPUT.PUT_LINE('== LIQUIDACION ' || TO_CHAR(v_ini, 'MM/YYYY') || ' ==');
+        DBMS_OUTPUT.PUT_LINE(RPAD('Alojamiento', 30) || RPAD('Municipio', 12) ||
+                             LPAD('Noches', 7) || LPAD('Hospedaje', 16) ||
+                             LPAD('Servicios', 14) || LPAD('Total', 16));
+
+        OPEN c_aloj(v_ini, v_fin);
         LOOP
             FETCH c_aloj INTO r_aloj;
             EXIT WHEN c_aloj%NOTFOUND;
 
-            SELECT NVL(SUM(fn_valor_estadia(rh.id_habitacion, rh.checkin, rh.checkout)), 0)
-              INTO v_hospedaje
+            -- Noches y valor del hospedaje que caen dentro del mes
+            SELECT NVL(SUM(LEAST(rh.checkout, v_fin) - GREATEST(rh.checkin, v_ini)), 0),
+                   NVL(SUM(fn_valor_estadia(rh.id_habitacion,
+                                            GREATEST(rh.checkin, v_ini),
+                                            LEAST(rh.checkout, v_fin))), 0)
+              INTO v_noches, v_hospedaje
               FROM Habitacion h
               JOIN Reserva_Habitacion rh ON rh.id_habitacion = h.id_habitacion
               JOIN Reserva r             ON r.id_reserva     = rh.id_reserva
              WHERE h.id_alojamiento = r_aloj.id_alojamiento
                AND r.estado IN ('confirmada', 'completada')
-               AND EXTRACT(YEAR  FROM rh.checkin) = p_anio
-               AND EXTRACT(MONTH FROM rh.checkin) = p_mes;
+               AND rh.checkin  < v_fin
+               AND rh.checkout > v_ini;
 
+            -- Servicios de las reservas que llegan en el mes
             SELECT NVL(SUM(rs.cantidad * rs.precio_cobrado), 0)
               INTO v_servicios
               FROM Servicio s
@@ -200,25 +368,33 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
               JOIN Reserva r           ON r.id_reserva   = rs.id_reserva
              WHERE s.id_alojamiento = r_aloj.id_alojamiento
                AND r.estado IN ('confirmada', 'completada')
-               AND EXISTS (SELECT 1 FROM Reserva_Habitacion rh2
-                            WHERE rh2.id_reserva = r.id_reserva
-                              AND EXTRACT(YEAR  FROM rh2.checkin) = p_anio
-                              AND EXTRACT(MONTH FROM rh2.checkin) = p_mes);
+               AND (SELECT MIN(rh2.checkin)
+                      FROM Reserva_Habitacion rh2
+                     WHERE rh2.id_reserva = r.id_reserva) >= v_ini
+               AND (SELECT MIN(rh2.checkin)
+                      FROM Reserva_Habitacion rh2
+                     WHERE rh2.id_reserva = r.id_reserva) <  v_fin;
 
             DBMS_OUTPUT.PUT_LINE(
-                RPAD(r_aloj.nombre_comercial, 24) || ' ' ||
-                RPAD(r_aloj.municipio, 12)        || ' ' ||
-                'hospedaje ' || LPAD(TO_CHAR(v_hospedaje, 'FM999G999G990'), 12) || ' ' ||
-                'servicios ' || LPAD(TO_CHAR(v_servicios, 'FM999G999G990'), 10) || ' ' ||
-                'total '     || LPAD(TO_CHAR(v_hospedaje + v_servicios, 'FM999G999G990'), 12));
+                RPAD(r_aloj.nombre_comercial, 30) ||
+                RPAD(r_aloj.municipio, 12)        ||
+                LPAD(v_noches, 7)                 ||
+                LPAD(dinero(v_hospedaje), 16)     ||
+                LPAD(dinero(v_servicios), 14)     ||
+                LPAD(dinero(v_hospedaje + v_servicios), 16));
 
-            v_total_dpto := v_total_dpto + v_hospedaje + v_servicios;
+            v_tot_noches := v_tot_noches + v_noches;
+            v_tot_hosp   := v_tot_hosp   + v_hospedaje;
+            v_tot_serv   := v_tot_serv   + v_servicios;
             v_n          := v_n + 1;
         END LOOP;
         CLOSE c_aloj;
 
-        DBMS_OUTPUT.PUT_LINE('Alojamientos liquidados: ' || v_n ||
-            ' . Total departamento: ' || TO_CHAR(v_total_dpto, 'FM999G999G990'));
+        DBMS_OUTPUT.PUT_LINE(RPAD('TOTAL DEPARTAMENTO (' || v_n || ' alojamientos)', 42) ||
+                             LPAD(v_tot_noches, 7)                    ||
+                             LPAD(dinero(v_tot_hosp), 16)             ||
+                             LPAD(dinero(v_tot_serv), 14)             ||
+                             LPAD(dinero(v_tot_hosp + v_tot_serv), 16));
     END sp_liquidacion_mensual;
 
 END pkg_turismo;
