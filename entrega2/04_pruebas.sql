@@ -102,19 +102,47 @@ BEGIN
     ROLLBACK;
 
     -- Temporadas solapadas: una temporada de un dia encima de otra.
-    INSERT INTO Temporada (nombre, tipo, fecha_inicio, fecha_fin)
-    VALUES ('Temporada de prueba solapada', 'alta', DATE '2025-02-11', DATE '2025-02-11')
-    RETURNING id_temporada INTO v_temp;
-    INSERT INTO Tarifa (id_habitacion, id_temporada, valor_noche) VALUES (v_hab, v_temp, 999000);
-    probar('Temporadas solapadas (-20006)',      v_hab, DATE '2025-02-10', DATE '2025-02-13');
+    -- Primera barrera: trg_temporada_no_solape no deja crearla (-20022).
+    BEGIN
+        INSERT INTO Temporada (nombre, tipo, fecha_inicio, fecha_fin)
+        VALUES ('Temporada de prueba solapada', 'alta', DATE '2025-02-11', DATE '2025-02-11');
+        DBMS_OUTPUT.PUT_LINE(RPAD('Temporada solapada (-20022)', 38) || ' -> SE ACEPTO (no esperado)');
+    EXCEPTION
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE(RPAD('Temporada solapada (-20022)', 38) || ' -> ' || SQLERRM);
+    END;
     ROLLBACK;
+
+    -- Segunda barrera: si el solape llegara a existir (por ejemplo, datos
+    -- cargados con el disparador deshabilitado), fn_valor_estadia no cobra la
+    -- noche dos veces sino que lanza -20006. Para probarlo se deshabilita el
+    -- disparador solo durante este caso.
+    EXECUTE IMMEDIATE 'ALTER TRIGGER trg_temporada_no_solape DISABLE';
+    BEGIN
+        INSERT INTO Temporada (nombre, tipo, fecha_inicio, fecha_fin)
+        VALUES ('Temporada de prueba solapada', 'alta', DATE '2025-02-11', DATE '2025-02-11')
+        RETURNING id_temporada INTO v_temp;
+        INSERT INTO Tarifa (id_habitacion, id_temporada, valor_noche) VALUES (v_hab, v_temp, 999000);
+        probar('Temporadas solapadas (-20006)',      v_hab, DATE '2025-02-10', DATE '2025-02-13');
+        ROLLBACK;
+        EXECUTE IMMEDIATE 'ALTER TRIGGER trg_temporada_no_solape ENABLE';
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            EXECUTE IMMEDIATE 'ALTER TRIGGER trg_temporada_no_solape ENABLE';
+            RAISE;
+    END;
 END;
 /
 
 -- Prueba 2: sp_crear_reserva, caso valido (busca una ventana libre).
+-- Las fechas son de 2025, asi que se registra como una reserva hecha 30 dias
+-- antes del checkin (p_fecha_reserva); sin ese parametro la fecha de reserva
+-- es hoy y el procedimiento la rechazaria con -20016 (ver prueba 3g).
 DECLARE
-    v_in  DATE;
-    v_res Reserva.id_reserva%TYPE;
+    v_in    DATE;
+    v_res   Reserva.id_reserva%TYPE;
+    v_precio Reserva_Habitacion.precio_noche_calculado%TYPE;
 BEGIN
     SELECT d INTO v_in FROM (
         SELECT DATE '2025-01-10' + (LEVEL - 1) AS d
@@ -122,47 +150,133 @@ BEGIN
     ) x
     WHERE NOT EXISTS (
         SELECT 1 FROM Reserva_Habitacion rh JOIN Reserva r ON r.id_reserva = rh.id_reserva
-         WHERE rh.id_habitacion = 1 AND r.estado = 'confirmada'
+         WHERE rh.id_habitacion = 1 AND r.estado <> 'cancelada'
            AND x.d < rh.checkout AND x.d + 3 > rh.checkin)
       AND ROWNUM = 1;
 
     pkg_turismo.sp_crear_reserva(
         p_id_cliente => 1, p_id_habitacion => 1, p_cantidad_huespedes => 1,
-        p_checkin => v_in, p_checkout => v_in + 3, p_id_reserva => v_res);
+        p_checkin => v_in, p_checkout => v_in + 3, p_id_reserva => v_res,
+        p_fecha_reserva => v_in - 30);
+
+    SELECT precio_noche_calculado INTO v_precio
+      FROM Reserva_Habitacion WHERE id_reserva = v_res;
 
     DBMS_OUTPUT.PUT_LINE('OK -> reserva creada id=' || v_res ||
-        ' (' || TO_CHAR(v_in, 'YYYY-MM-DD') || ' -> ' || TO_CHAR(v_in + 3, 'YYYY-MM-DD') || ')');
+        ' (' || TO_CHAR(v_in, 'YYYY-MM-DD') || ' -> ' || TO_CHAR(v_in + 3, 'YYYY-MM-DD') ||
+        '), precio por noche ' || v_precio ||
+        ', estadia ' || pkg_turismo.fn_valor_estadia(1, v_in, v_in + 3));
 END;
 /
 ROLLBACK;
 
--- Prueba 3: sp_crear_reserva, excepciones (20011, 20014, 20013, 20012, 20010).
+-- Prueba 3: sp_crear_reserva, excepciones.
+--   3a -20011  checkout igual al checkin
+--   3b -20014  cantidad de huespedes en cero
+--   3c -20013  habitacion inexistente
+--   3d -20012  capacidad excedida
+--   3e -20010  habitacion ocupada por una reserva confirmada
+--   3f -20010  habitacion ocupada por una reserva PENDIENTE (tambien ocupa)
+--   3g -20016  checkin anterior a la fecha de la reserva (hoy)
+--   3h -20017  cliente inexistente
+--   3i -20017  cliente nulo
+-- Los casos 3a a 3f usan fechas de 2025 con fecha de reserva 2025-01-01.
 DECLARE
+    c_freserva CONSTANT DATE := DATE '2025-01-01';
     v_res Reserva.id_reserva%TYPE;
     v_in  DATE;
-    PROCEDURE intentar (p_caso VARCHAR2, p_hab NUMBER, p_hue NUMBER, p_in DATE, p_out DATE) IS
+    v_pen Reserva.id_reserva%TYPE;
+    PROCEDURE intentar (p_caso VARCHAR2, p_hab NUMBER, p_hue NUMBER, p_in DATE, p_out DATE,
+                        p_cli NUMBER DEFAULT 1, p_freserva DATE DEFAULT c_freserva) IS
     BEGIN
-        pkg_turismo.sp_crear_reserva(1, p_hab, p_hue, p_in, p_out, v_res);
+        pkg_turismo.sp_crear_reserva(p_cli, p_hab, p_hue, p_in, p_out, v_res, p_freserva);
         DBMS_OUTPUT.PUT_LINE(p_caso || ' -> creada id=' || v_res);
     EXCEPTION
         WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE(p_caso || ' -> ' || SQLERRM);
     END;
+
+    -- Primer dia desde p_desde con p_noches + 1 libres en la habitacion 1
+    FUNCTION ventana_libre (p_desde DATE, p_noches NUMBER) RETURN DATE IS
+        v_d DATE;
+    BEGIN
+        SELECT d INTO v_d FROM (
+            SELECT p_desde + (LEVEL - 1) AS d FROM dual CONNECT BY LEVEL <= 200
+        ) x
+        WHERE NOT EXISTS (
+            SELECT 1 FROM Reserva_Habitacion rh JOIN Reserva r ON r.id_reserva = rh.id_reserva
+             WHERE rh.id_habitacion = 1 AND r.estado <> 'cancelada'
+               AND x.d < rh.checkout AND x.d + p_noches + 1 > rh.checkin)
+          AND ROWNUM = 1;
+        RETURN v_d;
+    END;
 BEGIN
-    intentar('3a fechas ', 1, 1, DATE '2025-05-10', DATE '2025-05-10');
+    intentar('3a fechas  ', 1, 1, DATE '2025-05-10', DATE '2025-05-10');
     intentar('3b cantidad', 1, 0, DATE '2025-05-10', DATE '2025-05-13');
     intentar('3c no exist', 999999, 1, DATE '2025-05-10', DATE '2025-05-13');
     intentar('3d capac.  ', 1, 999, DATE '2025-05-10', DATE '2025-05-13');
 
-    SELECT d INTO v_in FROM (
-        SELECT DATE '2025-06-01' + (LEVEL - 1) AS d FROM dual CONNECT BY LEVEL <= 200
-    ) x
-    WHERE NOT EXISTS (
-        SELECT 1 FROM Reserva_Habitacion rh JOIN Reserva r ON r.id_reserva = rh.id_reserva
-         WHERE rh.id_habitacion = 1 AND r.estado = 'confirmada'
-           AND x.d < rh.checkout AND x.d + 4 > rh.checkin)
-      AND ROWNUM = 1;
-    pkg_turismo.sp_crear_reserva(1, 1, 1, v_in, v_in + 3, v_res);
-    intentar('3e solape ', 1, 1, v_in + 1, v_in + 4);
+    v_in := ventana_libre(DATE '2025-06-01', 3);
+    pkg_turismo.sp_crear_reserva(1, 1, 1, v_in, v_in + 3, v_res, c_freserva);
+    intentar('3e solape  ', 1, 1, v_in + 1, v_in + 4);
+
+    -- 3f. Una reserva pendiente (anticipo sin confirmar) tambien ocupa
+    v_in := ventana_libre(DATE '2025-09-01', 3);
+    INSERT INTO Reserva (id_cliente, fecha_reserva, estado)
+    VALUES (2, c_freserva, 'pendiente')
+    RETURNING id_reserva INTO v_pen;
+    INSERT INTO Reserva_Habitacion (id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado)
+    VALUES (v_pen, 1, v_in, v_in + 3, 100000);
+    intentar('3f pendien.', 1, 1, v_in + 1, v_in + 4);
+
+    -- 3g. Sin p_fecha_reserva la reserva se hace hoy: no puede llegar en 2025
+    intentar('3g pasado  ', 1, 1, DATE '2025-05-10', DATE '2025-05-13', 1, NULL);
+    intentar('3h cliente ', 1, 1, DATE '2025-05-10', DATE '2025-05-13', 999999);
+    intentar('3i cli nulo', 1, 1, DATE '2025-05-10', DATE '2025-05-13', NULL);
+END;
+/
+ROLLBACK;
+
+-- Prueba 3j: fechas con hora y precio redondeado.
+--   * Un checkin a las 15:00 y un checkout a las 11:00 se guardan sin hora,
+--     asi que quien llega el dia del checkout no choca con esta reserva.
+--   * precio_noche_calculado se guarda con 2 decimales aunque el valor de la
+--     estadia no sea divisible entre las noches (antes quedaba 285666.666...).
+DECLARE
+    c_in   CONSTANT DATE := DATE '2026-12-13';
+    c_out  CONSTANT DATE := DATE '2026-12-16';
+    v_hab  Habitacion.id_habitacion%TYPE;
+    v_res  Reserva.id_reserva%TYPE;
+    v_res2 Reserva.id_reserva%TYPE;
+    v_total NUMBER;
+BEGIN
+    -- Habitacion libre en esas fechas cuya estadia de 3 noches no es multiplo de 3
+    SELECT MIN(h.id_habitacion) INTO v_hab
+      FROM Habitacion h
+     WHERE NOT EXISTS (
+           SELECT 1 FROM Reserva_Habitacion rh JOIN Reserva r ON r.id_reserva = rh.id_reserva
+            WHERE rh.id_habitacion = h.id_habitacion AND r.estado <> 'cancelada'
+              AND rh.checkin < c_out + 1 AND rh.checkout > c_in)
+       AND MOD(pkg_turismo.fn_valor_estadia(h.id_habitacion, c_in, c_out), 3) <> 0;
+
+    pkg_turismo.sp_crear_reserva(1, v_hab, 1,
+        c_in  + 15/24,     -- 2026-12-13 15:00
+        c_out + 11/24,     -- 2026-12-16 11:00
+        v_res, DATE '2026-10-01');
+
+    v_total := pkg_turismo.fn_valor_estadia(v_hab, c_in, c_out);
+    FOR r IN (SELECT TO_CHAR(checkin,  'YYYY-MM-DD HH24:MI') AS ci,
+                     TO_CHAR(checkout, 'YYYY-MM-DD HH24:MI') AS co,
+                     precio_noche_calculado AS precio
+                FROM Reserva_Habitacion WHERE id_reserva = v_res) LOOP
+        DBMS_OUTPUT.PUT_LINE('3j habitacion ' || v_hab || ': guardada ' || r.ci || ' -> ' || r.co ||
+                             ' (esperado 00:00)');
+        DBMS_OUTPUT.PUT_LINE('3j estadia ' || v_total || ' / 3 noches -> precio_noche_calculado ' ||
+                             r.precio || ' (esperado ' || ROUND(v_total / 3, 2) || ')');
+    END LOOP;
+
+    -- Quien llega el 16 (dia del checkout) no choca
+    pkg_turismo.sp_crear_reserva(2, v_hab, 1, c_out, c_out + 1, v_res2, DATE '2026-10-01');
+    DBMS_OUTPUT.PUT_LINE('3j llegada el dia del checkout -> aceptada (id=' || v_res2 || ')');
 END;
 /
 ROLLBACK;
@@ -251,6 +365,12 @@ ROLLBACK;
 --       (un disparador de fila simple daria ORA-04091, tabla mutante)
 --   6d. UPDATE que mueve una linea encima de otra reserva         -> ORA-20020
 --   6e. Linea que empieza el mismo dia en que termina otra        -> se acepta
+--   6f. Confirmada encima de una reserva PENDIENTE                -> ORA-20020
+--       (antes se aceptaba y, al confirmar la pendiente, quedaban dos
+--       reservas confirmadas en las mismas fechas)
+--   6g. Reserva cancelada en fechas ocupadas                      -> se acepta
+--       (una cancelada no ocupa la habitacion)
+--   6h. Reactivar esa cancelada (UPDATE de estado)                -> ORA-20021
 -- =============================================================================
 DECLARE
     v_cli   Cliente.id_cliente%TYPE;
@@ -259,17 +379,20 @@ DECLARE
     v_r1    Reserva.id_reserva%TYPE;
     v_r2    Reserva.id_reserva%TYPE;
     v_r3    Reserva.id_reserva%TYPE;
+    v_r4    Reserva.id_reserva%TYPE;
+    v_r5    Reserva.id_reserva%TYPE;
+    v_r6    Reserva.id_reserva%TYPE;
     v_rh2   Reserva_Habitacion.id_reserva_habitacion%TYPE;
     v_ohab  Reserva_Habitacion.id_habitacion%TYPE;
     v_oin   Reserva_Habitacion.checkin%TYPE;
     v_oout  Reserva_Habitacion.checkout%TYPE;
     v_ores  Reserva_Habitacion.id_reserva%TYPE;
 
-    FUNCTION nueva_reserva RETURN NUMBER IS
+    FUNCTION nueva_reserva (p_estado VARCHAR2 DEFAULT 'confirmada') RETURN NUMBER IS
         v_id Reserva.id_reserva%TYPE;
     BEGIN
         INSERT INTO Reserva (id_cliente, fecha_reserva, estado)
-        VALUES (v_cli, SYSDATE, 'confirmada')
+        VALUES (v_cli, SYSDATE, p_estado)
         RETURNING id_reserva INTO v_id;
         RETURN v_id;
     END;
@@ -349,6 +472,37 @@ BEGIN
         resultado('6e. Checkin 2028-03-05 = checkout de 6b', 'aceptada', 'aceptada');
     EXCEPTION WHEN OTHERS THEN
         resultado('6e. Checkin 2028-03-05 = checkout de 6b', 'aceptada', SQLERRM);
+    END;
+
+    -- 6f. Una reserva pendiente ocupa: una confirmada no puede cruzarse con ella
+    v_r4 := nueva_reserva('pendiente');
+    v_r5 := nueva_reserva('confirmada');
+    INSERT INTO Reserva_Habitacion (id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado)
+    VALUES (v_r4, v_hab, DATE '2028-07-01', DATE '2028-07-05', 100000);
+    BEGIN
+        INSERT INTO Reserva_Habitacion (id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado)
+        VALUES (v_r5, v_hab, DATE '2028-07-03', DATE '2028-07-06', 100000);
+        resultado('6f. Confirmada sobre la pendiente ' || v_r4, 'ORA-20020', 'SE ACEPTO (error)');
+    EXCEPTION WHEN OTHERS THEN
+        resultado('6f. Confirmada sobre la pendiente ' || v_r4, 'ORA-20020', SQLERRM);
+    END;
+
+    -- 6g. Una reserva cancelada no ocupa: puede quedar en las mismas fechas
+    v_r6 := nueva_reserva('cancelada');
+    BEGIN
+        INSERT INTO Reserva_Habitacion (id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado)
+        VALUES (v_r6, v_hab, DATE '2028-07-03', DATE '2028-07-06', 100000);
+        resultado('6g. Cancelada sobre la pendiente ' || v_r4, 'aceptada', 'aceptada');
+    EXCEPTION WHEN OTHERS THEN
+        resultado('6g. Cancelada sobre la pendiente ' || v_r4, 'aceptada', SQLERRM);
+    END;
+
+    -- 6h. Si la cancelada se reactiva, sus fechas chocan con la pendiente
+    BEGIN
+        UPDATE Reserva SET estado = 'confirmada' WHERE id_reserva = v_r6;
+        resultado('6h. Reactivar la cancelada ' || v_r6, 'ORA-20021', 'SE ACEPTO (error)');
+    EXCEPTION WHEN OTHERS THEN
+        resultado('6h. Reactivar la cancelada ' || v_r6, 'ORA-20021', SQLERRM);
     END;
 
     ROLLBACK;

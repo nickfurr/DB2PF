@@ -10,7 +10,13 @@
 --     -20005  La habitacion no tiene tarifa para la temporada de una noche.
 --     -20006  Una noche cae en dos temporadas (temporadas solapadas).
 --   sp_crear_reserva
---     -20010 .. -20014 (ver el procedimiento).
+--     -20010  La habitacion esta ocupada en el rango (reserva no cancelada).
+--     -20011  La fecha de checkout no es posterior al checkin.
+--     -20012  La cantidad de huespedes excede la capacidad.
+--     -20013  La habitacion no existe.
+--     -20014  La cantidad de huespedes no es mayor que cero.
+--     -20016  El checkin es anterior a la fecha de la reserva.
+--     -20017  El cliente es nulo o no existe.
 --   sp_liquidacion_mensual
 --     -20015  Ano o mes invalidos.
 
@@ -67,13 +73,16 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
     -- cruza con TEMPORADA y TARIFA mediante LEFT JOIN, para que una noche sin
     -- temporada o sin tarifa no desaparezca: llega con columnas nulas y la
     -- funcion la detecta y la reporta como error.
+    -- n_temporadas cuenta en cuantas temporadas cae cada noche: si son dos o
+    -- mas, TEMPORADA tiene periodos solapados y la noche no tiene precio unico.
     -- -------------------------------------------------------------------------
     CURSOR c_noches (p_hab NUMBER, p_in DATE, p_out DATE) IS
         SELECT d.noche,
                t.id_temporada,
                t.nombre AS temporada,
                t.tipo,
-               tar.valor_noche
+               tar.valor_noche,
+               COUNT(t.id_temporada) OVER (PARTITION BY d.noche) AS n_temporadas
           FROM (SELECT TRUNC(p_in) + LEVEL - 1 AS noche
                   FROM dual
                CONNECT BY LEVEL <= TRUNC(p_out) - TRUNC(p_in)) d
@@ -116,14 +125,15 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
         p_fecha_out     IN DATE
     ) RETURN NUMBER IS
         v_total       NUMBER := 0;
-        v_noche_ant   DATE;
     BEGIN
         validar_estadia(p_id_habitacion, p_fecha_in, p_fecha_out);
 
         -- Recorrido noche por noche: cada noche suma la tarifa de SU temporada.
+        -- Primero se revisa el solape de temporadas, para que una noche en dos
+        -- temporadas siempre se reporte como tal y no como falta de tarifa.
         FOR r IN c_noches(p_id_habitacion, p_fecha_in, p_fecha_out) LOOP
 
-            IF r.noche = v_noche_ant THEN
+            IF r.n_temporadas > 1 THEN
                 RAISE_APPLICATION_ERROR(-20006,
                     'La noche ' || TO_CHAR(r.noche, 'YYYY-MM-DD') ||
                     ' pertenece a mas de una temporada; revise TEMPORADA.');
@@ -141,8 +151,7 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
                     r.temporada || ' (noche ' || TO_CHAR(r.noche, 'YYYY-MM-DD') || ').');
             END IF;
 
-            v_total     := v_total + r.valor_noche;
-            v_noche_ant := r.noche;
+            v_total := v_total + r.valor_noche;
         END LOOP;
 
         RETURN v_total;
@@ -203,23 +212,50 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
         p_id_reserva         OUT Reserva.id_reserva%TYPE,
         p_fecha_reserva      IN  Reserva.fecha_reserva%TYPE DEFAULT SYSDATE
     ) IS
+        -- Las fechas se manejan sin hora: la estadia va de un dia a otro y la
+        -- noche del checkout no se cobra. Con horas, una salida a las 11:00
+        -- bloquearia ese dia a quien llega despues.
+        v_checkin            DATE := TRUNC(p_checkin);
+        v_checkout           DATE := TRUNC(p_checkout);
+        v_fecha_reserva      DATE := NVL(p_fecha_reserva, SYSDATE);
         v_capacidad          Habitacion.capacidad%TYPE;
+        v_cliente_existe     NUMBER;
         v_habitacion_ocupada NUMBER;
         v_precio_noche       Reserva_Habitacion.precio_noche_calculado%TYPE;
 
         e_checkout_invalido  EXCEPTION;
+        e_checkin_pasado     EXCEPTION;
         e_capacidad_excedida EXCEPTION;
         e_cantidad_invalida  EXCEPTION;
+        e_cliente_invalido   EXCEPTION;
         e_no_disponible      EXCEPTION;
     BEGIN
         SAVEPOINT sp_crear_reserva_inicio;
 
-        IF p_checkin IS NULL OR p_checkout IS NULL OR p_checkout <= p_checkin THEN
+        IF v_checkin IS NULL OR v_checkout IS NULL OR v_checkout <= v_checkin THEN
             RAISE e_checkout_invalido;
+        END IF;
+
+        -- No se reserva hacia atras: el huesped no puede llegar antes del dia
+        -- en que hizo la reserva. p_fecha_reserva permite registrar reservas
+        -- historicas (por ejemplo, en las pruebas) con su fecha real.
+        IF v_checkin < TRUNC(v_fecha_reserva) THEN
+            RAISE e_checkin_pasado;
         END IF;
 
         IF p_cantidad_huespedes IS NULL OR p_cantidad_huespedes <= 0 THEN
             RAISE e_cantidad_invalida;
+        END IF;
+
+        -- Con un cliente nulo o inexistente el INSERT fallaria con ORA-01400 u
+        -- ORA-02291; se valida antes para responder con un error propio.
+        SELECT COUNT(*)
+          INTO v_cliente_existe
+          FROM Cliente
+         WHERE id_cliente = p_id_cliente;
+
+        IF v_cliente_existe = 0 THEN
+            RAISE e_cliente_invalido;
         END IF;
 
         SELECT capacidad
@@ -231,32 +267,36 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
             RAISE e_capacidad_excedida;
         END IF;
 
+        -- Una reserva ocupa la habitacion mientras no este cancelada: la
+        -- pendiente ya tiene anticipo, la confirmada esta asegurada y la
+        -- completada es una estadia que ya ocurrio. Es la misma regla de
+        -- trg_reserva_no_solape.
         SELECT COUNT(*)
           INTO v_habitacion_ocupada
           FROM Reserva_Habitacion rh
           JOIN Reserva r ON r.id_reserva = rh.id_reserva
          WHERE rh.id_habitacion = p_id_habitacion
-           AND r.estado = 'confirmada'
-           AND rh.checkin  < p_checkout
-           AND rh.checkout > p_checkin;
+           AND r.estado <> 'cancelada'
+           AND rh.checkin  < v_checkout
+           AND rh.checkout > v_checkin;
 
         IF v_habitacion_ocupada > 0 THEN
             RAISE e_no_disponible;
         END IF;
 
-        SELECT fn_valor_estadia(p_id_habitacion, p_checkin, p_checkout)
-               / (TRUNC(p_checkout) - TRUNC(p_checkin))
-          INTO v_precio_noche
-          FROM DUAL;
+        -- Precio promedio por noche, redondeado a centavos como en la carga de
+        -- datos. El valor exacto de la estadia sigue siendo fn_valor_estadia.
+        v_precio_noche := ROUND(fn_valor_estadia(p_id_habitacion, v_checkin, v_checkout)
+                                / (v_checkout - v_checkin), 2);
 
         INSERT INTO Reserva (id_cliente, fecha_reserva, estado)
-        VALUES (p_id_cliente, NVL(p_fecha_reserva, SYSDATE), 'confirmada')
+        VALUES (p_id_cliente, v_fecha_reserva, 'confirmada')
         RETURNING id_reserva INTO p_id_reserva;
 
         INSERT INTO Reserva_Habitacion (
             id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado
         ) VALUES (
-            p_id_reserva, p_id_habitacion, p_checkin, p_checkout, v_precio_noche
+            p_id_reserva, p_id_habitacion, v_checkin, v_checkout, v_precio_noche
         );
     EXCEPTION
         WHEN e_no_disponible THEN
@@ -271,6 +311,14 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
         WHEN e_cantidad_invalida THEN
             ROLLBACK TO sp_crear_reserva_inicio;
             RAISE_APPLICATION_ERROR(-20014, 'La cantidad de huespedes debe ser mayor que cero.');
+        WHEN e_checkin_pasado THEN
+            ROLLBACK TO sp_crear_reserva_inicio;
+            RAISE_APPLICATION_ERROR(-20016, 'El checkin (' || TO_CHAR(v_checkin, 'YYYY-MM-DD') ||
+                ') no puede ser anterior a la fecha de la reserva (' ||
+                TO_CHAR(v_fecha_reserva, 'YYYY-MM-DD') || ').');
+        WHEN e_cliente_invalido THEN
+            ROLLBACK TO sp_crear_reserva_inicio;
+            RAISE_APPLICATION_ERROR(-20017, 'El cliente ' || NVL(TO_CHAR(p_id_cliente), '(nulo)') || ' no existe.');
         WHEN NO_DATA_FOUND THEN
             ROLLBACK TO sp_crear_reserva_inicio;
             RAISE_APPLICATION_ERROR(-20013, 'La habitacion indicada no existe.');
