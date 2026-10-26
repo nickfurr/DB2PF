@@ -276,9 +276,27 @@ END;
 /
 ROLLBACK;
 
--- Prueba 4: sp_liquidacion_mensual.
+-- =============================================================================
+-- Prueba 4: sp_liquidacion_mensual (cursor explicito con parametros)
+--   4a. Liquidacion de julio de 2025. La fila TOTAL DEPARTAMENTO debe mostrar
+--       las mismas noches que la vista materializada para 2025-07 (4b).
+--   4c. Mes invalido -> ORA-20015
+-- =============================================================================
 BEGIN
     pkg_turismo.sp_liquidacion_mensual(2025, 7);
+END;
+/
+
+-- 4b. Noches de julio de 2025 segun la vista materializada (deben coincidir)
+SELECT SUM(noches_ocupadas) AS noches_julio_2025_vista
+  FROM mv_ocupacion_mensual
+ WHERE anio_mes = '2025-07';
+
+-- 4c. Mes invalido
+BEGIN
+    pkg_turismo.sp_liquidacion_mensual(2025, 13);
+EXCEPTION
+    WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('4c. Mes 13 -> ' || SQLERRM);
 END;
 /
 
