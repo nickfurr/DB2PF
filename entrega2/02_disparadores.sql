@@ -1,11 +1,10 @@
 -- ENTREGA 2 - TurismoUQ
--- 02. Disparadores: auditoria de TARIFA, control de solape de reservas y de
---     temporadas.
+-- 02. Disparadores: auditoria de TARIFA, solape de reservas y de temporadas.
 --
--- Codigos de error propios:
---   -20020  Una linea de reserva se cruza con otra reserva no cancelada.
---   -20021  Una reserva cancelada no se puede reactivar: sus fechas ya estan ocupadas.
---   -20022  Una temporada se cruza con otra.
+-- Errores:
+--   -20020  la linea se cruza con otra reserva
+--   -20021  no se puede reactivar la cancelada, ya ocuparon esas fechas
+--   -20022  temporada cruzada con otra
 
 SET SERVEROUTPUT ON
 
@@ -103,18 +102,13 @@ END trg_auditoria_tarifa;
 /
 
 -- -----------------------------------------------------------------------------
--- Disparador de FILA: impide que una habitacion quede reservada dos veces en
--- fechas que se cruzan.
+-- Disparador de FILA: que una habitacion no quede reservada dos veces en las
+-- mismas fechas.
 --
--- Que reservas ocupan la habitacion: todas las que NO estan canceladas.
---   * confirmada: es la regla del enunciado.
---   * pendiente:  ya tiene anticipo; si no ocupara, otra reserva podria tomar
---                 la habitacion y luego, al confirmar la pendiente, quedarian
---                 dos reservas confirmadas en las mismas fechas.
---   * completada: es una estadia que ya ocurrio.
--- Es la misma regla que aplica sp_crear_reserva y la que sigue la carga de
--- datos (verificacion: 0 solapes entre reservas no canceladas).
--- Una linea de una reserva cancelada no ocupa ni se valida.
+-- Ocupa todo lo que no este cancelado. Las pendientes tambien, porque si no
+-- alguien mas coge la habitacion y cuando se confirma la pendiente quedan dos
+-- confirmadas encima. Las canceladas no cuentan (ni se revisan).
+-- sp_crear_reserva usa la misma regla.
 --
 -- Dos rangos [checkin, checkout) se solapan si
 --     nuevo.checkin < otro.checkout  AND  nuevo.checkout > otro.checkin
@@ -133,8 +127,8 @@ END trg_auditoria_tarifa;
 --   revisa fila por fila contra todas las reservas no canceladas, incluidas
 --   las que la misma transaccion acaba de insertar. Si una fila choca, se
 --   lanza ORA-20020 y Oracle deshace la sentencia completa.
---   Tambien se dispara si una linea cambia de reserva (id_reserva), porque
---   puede pasar de una reserva cancelada a una activa.
+--   Ojo que tambien salta si le cambian id_reserva a una linea (la pueden
+--   pasar de una cancelada a una que no).
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE TRIGGER trg_reserva_no_solape
 FOR INSERT OR UPDATE OF id_reserva, id_habitacion, checkin, checkout ON Reserva_Habitacion
@@ -167,9 +161,8 @@ COMPOUND TRIGGER
         g_lineas(v_i).checkout              := :NEW.checkout;
     END AFTER EACH ROW;
 
-    -- Al terminar la sentencia: cada linea anotada de una reserva activa se
-    -- compara con las demas lineas de la misma habitacion que pertenecen a
-    -- reservas no canceladas.
+    -- al final de la sentencia se revisa cada linea contra las otras de esa
+    -- habitacion (si la reserva de la linea esta cancelada se salta)
     AFTER STATEMENT IS
         v_estado     Reserva.estado%TYPE;
         v_conflictos NUMBER;
@@ -208,17 +201,14 @@ END trg_reserva_no_solape;
 /
 
 -- -----------------------------------------------------------------------------
--- Complemento de trg_reserva_no_solape: reactivar una reserva cancelada.
+-- Para cuando "descancelan" una reserva.
 --
--- Una reserva cancelada no ocupa la habitacion, asi que otra reserva puede
--- tomar esas fechas. Si despues la cancelada vuelve a pendiente, confirmada o
--- completada con un UPDATE de RESERVA, el disparador de RESERVA_HABITACION no
--- se entera (sus lineas no cambian) y quedarian dos reservas activas en la
--- misma habitacion y fechas. Este disparador revisa ese caso.
--- El paso de pendiente a confirmada no necesita revision: la pendiente ya
--- ocupaba la habitacion y ninguna otra reserva pudo cruzarse con ella.
--- Es compuesto por la misma razon que el anterior: en AFTER STATEMENT puede
--- consultar RESERVA sin error de tabla mutante.
+-- La cancelada no ocupa, entonces otra reserva puede quedarse con esas fechas.
+-- Si despues le cambian el estado a la cancelada con un UPDATE a RESERVA, el
+-- trigger de arriba no se da cuenta porque las lineas no cambian, y quedan dos
+-- reservas en la misma habitacion. Este revisa eso.
+-- De pendiente a confirmada no hace falta, la pendiente ya ocupaba.
+-- Compuesto por lo mismo de la tabla mutante.
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE TRIGGER trg_reserva_reactivacion
 FOR UPDATE OF estado ON Reserva
@@ -232,7 +222,7 @@ COMPOUND TRIGGER
         g_reservas.DELETE;
     END BEFORE STATEMENT;
 
-    -- Nivel de fila: se anotan solo las reservas que salen de 'cancelada'.
+    -- solo las que estaban canceladas y ya no
     AFTER EACH ROW IS
     BEGIN
         IF :OLD.estado = 'cancelada' AND :NEW.estado <> 'cancelada' THEN
@@ -274,11 +264,10 @@ END trg_reserva_reactivacion;
 /
 
 -- -----------------------------------------------------------------------------
--- Temporadas sin solape: cada noche debe pertenecer a UNA sola temporada para
--- que fn_valor_estadia sepa que tarifa cobrar. El DDL solo impide dos
--- temporadas con la misma fecha de inicio (UNIQUE); este disparador impide
--- cualquier cruce de rangos [fecha_inicio, fecha_fin] (ambos dias incluidos).
--- fn_valor_estadia conserva su error -20006 como segunda barrera.
+-- Que las temporadas no se monten una encima de otra, si no fn_valor_estadia
+-- no sabe que tarifa cobrar esa noche. En el DDL solo esta el UNIQUE de
+-- fecha_inicio y eso no alcanza.
+-- (la funcion igual tiene el -20006 por si acaso)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE TRIGGER trg_temporada_no_solape
 FOR INSERT OR UPDATE OF fecha_inicio, fecha_fin ON Temporada
