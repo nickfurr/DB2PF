@@ -1,0 +1,320 @@
+
+EJECUCION
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Evidencia de pruebas Entrega 2 - TurismoUQ - 2026-10-25 22:59 - usuario PROJEC
+
+1 fila seleccionada.
+
+
+      CASO DESCRIPCION                                          CHECKIN    CHECKOUT       NOCHES VALOR_FUNCION VALOR_POR_TRAMOS   ESPERADO RESUL
+---------- ---------------------------------------------------- ---------- ---------- ---------- ------------- ---------------- ---------- -----
+         1 Una sola temporada (baja)                            2025-02-10 2025-02-13          3        642000           642000     642000 OK
+         2 Cruza alta -> baja (fin de la temporada de enero)    2025-01-10 2025-01-15          5       1127000          1127000    1127000 OK
+         3 Cruza media -> alta -> media (Semana Santa 2025)     2025-04-10 2025-04-23         13       3167000          3167000    3167000 OK
+         4 Cruza media -> alta (inicio de diciembre-enero 2024) 2024-12-13 2024-12-17          4        910000           910000     910000 OK
+
+4 filas seleccionadas.
+
+Habitacion 1: 2025-01-10 -> 2025-01-15 (5 noches)
+   2025-01-10  alta   Temporada alta diciembre-enero 2024-2025        233.000
+   2025-01-11  alta   Temporada alta diciembre-enero 2024-2025        233.000
+   2025-01-12  alta   Temporada alta diciembre-enero 2024-2025        233.000
+   Subtotal Temporada alta diciembre-enero 2024-2025: 3 noche(s) = 699.000
+   2025-01-13  baja   Temporada baja 2025 (13/01 al 21/03)            214.000
+   2025-01-14  baja   Temporada baja 2025 (13/01 al 21/03)            214.000
+   Subtotal Temporada baja 2025 (13/01 al 21/03): 2 noche(s) = 428.000
+   TOTAL fn_valor_estadia = 1.127.000
+
+Habitacion 1: 2025-04-10 -> 2025-04-23 (13 noches)
+   2025-04-10  media  Temporada media 2025 (01/04 al 11/04)           236.000
+   2025-04-11  media  Temporada media 2025 (01/04 al 11/04)           236.000
+   Subtotal Temporada media 2025 (01/04 al 11/04): 2 noche(s) = 472.000
+   2025-04-12  alta   Semana Santa 2025                               247.000
+   2025-04-13  alta   Semana Santa 2025                               247.000
+   2025-04-14  alta   Semana Santa 2025                               247.000
+   2025-04-15  alta   Semana Santa 2025                               247.000
+   2025-04-16  alta   Semana Santa 2025                               247.000
+   2025-04-17  alta   Semana Santa 2025                               247.000
+   2025-04-18  alta   Semana Santa 2025                               247.000
+   2025-04-19  alta   Semana Santa 2025                               247.000
+   2025-04-20  alta   Semana Santa 2025                               247.000
+   Subtotal Semana Santa 2025: 9 noche(s) = 2.223.000
+   2025-04-21  media  Temporada media 2025 (21/04 al 30/05)           236.000
+   2025-04-22  media  Temporada media 2025 (21/04 al 30/05)           236.000
+   Subtotal Temporada media 2025 (21/04 al 30/05): 2 noche(s) = 472.000
+   TOTAL fn_valor_estadia = 3.167.000
+
+Procedimiento PL/SQL terminado correctamente.
+Parametro nulo (-20000)                -> ORA-20000: La habitacion y las fechas de la estadia son obligatorias.
+Checkout igual al checkin (-20001)     -> ORA-20001: La fecha de checkout debe ser posterior al checkin.
+Checkout antes del checkin (-20001)    -> ORA-20001: La fecha de checkout debe ser posterior al checkin.
+Habitacion inexistente (-20003)        -> ORA-20003: La habitacion 999999 no existe.
+Noches sin temporada (-20002)          -> ORA-20002: La noche 2030-01-01 no pertenece a ninguna temporada definida.
+Habitacion sin tarifa (-20005)         -> ORA-20005: La habitacion 1 no tiene tarifa para Temporada baja 2025 (13/01 al 21/03) (noche 2025-02-10).
+Temporada solapada (-20022)            -> ORA-20022: La temporada "Temporada de prueba solapada" se cruza con "Temporada baja 2025 (13/01 al 21/03)": cada noche debe pertenecer a una sola temporada.
+Temporadas solapadas (-20006)          -> ORA-20006: La noche 2025-02-11 pertenece a mas de una temporada; revise TEMPORADA.
+
+Procedimiento PL/SQL terminado correctamente.
+OK -> reserva creada id=72269 (2025-01-10 -> 2025-01-13), precio por noche 233000, estadia 699000
+
+Procedimiento PL/SQL terminado correctamente.
+Rollback terminado.
+3a fechas   -> ORA-20011: La fecha de checkout debe ser posterior al checkin.
+3b cantidad -> ORA-20014: La cantidad de huespedes debe ser mayor que cero.
+3c no exist -> ORA-20013: La habitacion indicada no existe.
+3d capac.   -> ORA-20012: La cantidad de huespedes excede la capacidad de la habitacion.
+3e solape   -> ORA-20010: La habitacion no esta disponible para el rango indicado.
+3f pendien. -> ORA-20010: La habitacion no esta disponible para el rango indicado.
+3g pasado   -> ORA-20016: El checkin (2025-05-10) no puede ser anterior a la fecha de la reserva (2026-10-25).
+3h cliente  -> ORA-20017: El cliente 999999 no existe.
+3i cli nulo -> ORA-20017: El cliente (nulo) no existe.
+
+Procedimiento PL/SQL terminado correctamente.
+Rollback terminado.
+3j habitacion 3: guardada 2026-12-13 00:00 -> 2026-12-16 00:00 (esperado 00:00)
+3j estadia 559000 / 3 noches -> precio_noche_calculado 186333,33 (esperado 186333,33)
+3j llegada el dia del checkout -> aceptada (id=72273)
+
+Procedimiento PL/SQL terminado correctamente.
+Rollback terminado.
+== LIQUIDACION 07/2025 ==
+Alojamiento                   Municipio    Noches       Hospedaje     Servicios           Total
+Finca El Roble                Armenia          72      18.120.000     6.045.000      24.165.000
+Finca Las Heliconias          Armenia          67      14.270.000     3.813.000      18.083.000
+Hostal Los Guaduales          Armenia         129      13.518.000    14.726.000      28.244.000
+Hostal Palma de Cera          Armenia         176      18.690.000     6.966.000      25.656.000
+Hotel Bambu                   Armenia         206      50.938.000    27.034.000      77.972.000
+Hotel El Cafetal              Armenia         139      41.874.000    22.290.000      64.164.000
+Hotel El Mirador              Armenia         176      42.167.000     7.262.000      49.429.000
+Hotel La Esperanza            Armenia          41      12.546.000     4.480.000      17.026.000
+Hotel Los Arrayanes           Armenia         115      34.840.000     9.784.000      44.624.000
+Finca La Cascada              Buenavista       41       9.430.000     4.752.000      14.182.000
+Glamping Bosque de Niebla     Buenavista       46      19.464.000     4.459.000      23.923.000
+Finca La Floresta             Calarca          40      10.170.000     4.290.000      14.460.000
+Finca Los Naranjos            Calarca          84      24.000.000     8.293.000      32.293.000
+Hostal San Rafael             Calarca          83       8.484.000     5.086.000      13.570.000
+Hotel El Eden                 Calarca          77      22.160.000     8.069.000      30.229.000
+Hotel Monteverde              Calarca          62      23.251.000     5.068.000      28.319.000
+Finca El Recreo               Circasia         42      10.325.000     2.010.000      12.335.000
+Finca La Pradera              Circasia         52      23.056.000     4.447.000      27.503.000
+Glamping Villa Maria          Circasia         24       8.242.000       697.000       8.939.000
+Hostal El Porvenir            Circasia         71      10.051.000     5.278.000      15.329.000
+Finca Las Acacias             Cordoba          20       5.800.000     2.403.000       8.203.000
+Glamping Buenos Aires         Cordoba          49      14.383.000     6.870.000      21.253.000
+Finca La Primavera            Filandia         61      18.166.000     9.948.000      28.114.000
+Finca Santa Barbara           Filandia         71      21.017.000     8.201.000      29.218.000
+Glamping El Paraiso           Filandia         37      12.607.000     4.790.000      17.397.000
+Glamping La Montana           Filandia         75      19.425.000    12.870.000      32.295.000
+Hostal El Bosque              Filandia         55       7.227.000     3.700.000      10.927.000
+Hostal Los Alpes              Filandia        114      11.568.000     6.532.000      18.100.000
+Hotel El Cedral               Filandia         87      20.212.000     5.918.000      26.130.000
+Finca La Herradura            Genova            7       2.604.000       462.000       3.066.000
+Finca El Retiro               La Tebaida       43      13.530.000     6.658.000      20.188.000
+Finca La Victoria             La Tebaida       53      16.218.000     7.908.000      24.126.000
+Finca Las Palmas              La Tebaida       38      11.491.000     1.224.000      12.715.000
+Hotel Puerto Espejo           La Tebaida       59      22.628.000     5.268.000      27.896.000
+Finca Cocora                  Montenegro       37      14.314.000     4.333.000      18.647.000
+Finca El Jardin               Montenegro       83      25.529.000     8.776.000      34.305.000
+Finca El Ocaso                Montenegro       41      10.758.000     4.676.000      15.434.000
+Finca La Bella                Montenegro       32       5.856.000     1.760.000       7.616.000
+Finca La Coqueta              Montenegro       53      14.720.000     1.350.000      16.070.000
+Glamping Cafe y Niebla        Montenegro      114      44.962.000    14.394.000      59.356.000
+Hotel Altos del Rio           Montenegro      135      26.695.000    14.763.000      41.458.000
+Hotel Barbas                  Montenegro      103      20.699.000     8.587.000      29.286.000
+Finca La Alondra              Pijao            12       4.204.000       395.000       4.599.000
+Hostal El Guamo               Pijao            28       2.506.000     4.424.000       6.930.000
+Finca El Silencio             Quimbaya         51      14.953.000     2.550.000      17.503.000
+Finca La Tulia                Quimbaya         93      26.481.000     9.600.000      36.081.000
+Finca Las Orquideas           Quimbaya         29       6.697.000     1.000.000       7.697.000
+Glamping La Ceiba             Quimbaya        102      37.548.000     6.606.000      44.154.000
+Hotel Navarco                 Quimbaya         92      25.126.000     8.104.000      33.230.000
+Hotel Quebrada Negra          Quimbaya         34       7.666.000     2.692.000      10.358.000
+Finca La Rivera               Salento         108      23.598.000     5.559.000      29.157.000
+Finca Los Pinos               Salento          44      11.156.000     5.606.000      16.762.000
+Glamping El Laurel            Salento         115      46.109.000    14.256.000      60.365.000
+Glamping La Maizena           Salento         110      37.202.000     4.440.000      41.642.000
+Glamping Santa Ana            Salento          83      24.055.000     4.389.000      28.444.000
+Hostal El Nogal               Salento         116      11.788.000     8.998.000      20.786.000
+Hostal Morelia                Salento         154      15.908.000    13.050.000      28.958.000
+Hostal Tres Esquinas          Salento          81      11.175.000     4.186.000      15.361.000
+Hotel El Cairo                Salento         111      27.363.000    13.320.000      40.683.000
+Hotel Mirador Andino          Salento         117      36.133.000    11.614.000      47.747.000
+TOTAL DEPARTAMENTO (60 alojamientos)         4590   1.145.673.000   417.029.000   1.562.702.000
+
+Procedimiento PL/SQL terminado correctamente.
+
+NOCHES_JULIO_2025_VISTA
+-----------------------
+                   4590
+
+1 fila seleccionada.
+
+4c. Mes 13 -> ORA-20015: Indique un ano y un mes entre 1 y 12.
+
+Procedimiento PL/SQL terminado correctamente.
+Procedimiento PL/SQL terminado correctamente.
+
+1 fila actualizadas.
+
+
+40 filas actualizadas.
+
+
+1 fila actualizadas.
+
+
+1 fila insertadas.
+
+
+1 fila insertadas.
+
+
+1 fila eliminado
+
+
+SENTENCIA_EJECUTADA     OPERACION  USUARIO                        FILAS_AUDITADAS
+----------------------- ---------- ------------------------------ ---------------
+2026-10-25 22:59:55.885 UPDATE     PROJEC (solar)                               1
+2026-10-25 22:59:55.903 UPDATE     PROJEC (solar)                              40
+2026-10-25 22:59:55.938 INSERT     PROJEC (solar)                               1
+2026-10-25 22:59:55.950 DELETE     PROJEC (solar)                               1
+
+4 filas seleccionadas.
+
+
+ID_AUDITORIA  ID_TARIFA OPERACION  VALOR_ANTERIOR VALOR_NUEVO USUARIO                        FECHA_CAMBIO
+------------ ---------- ---------- -------------- ----------- ------------------------------ -----------------------
+         358          1 UPDATE             233000      245000 PROJEC (solar)                 2026-10-25 22:59:55.885
+         359         48 UPDATE             261000      287000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         360        113 UPDATE             261000      287000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         361        178 UPDATE             193000      212000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         362        243 UPDATE             193000      212000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         363        308 UPDATE             193000      212000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         364        373 UPDATE             193000      212000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         365        438 UPDATE             261000      287000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         366        503 UPDATE             261000      287000 PROJEC (solar)                 2026-10-25 22:59:55.903
+         367        568 UPDATE             193000      212000 PROJEC (solar)                 2026-10-25 22:59:55.903
+
+10 filas seleccionadas.
+
+Rollback terminado.
+6a. Cruce con la reserva confirmada 24       esperado: ORA-20020 -> ORA-20020: La habitacion 259 no esta disponible del 2026-12-20 al 2026-12-22: se cruza con la reserva 24.
+6b. Primera linea 2028-03-01 a 03-05         esperado: aceptada  -> aceptada (sin COMMIT)
+6b. Segunda linea 2028-03-03 a 03-06         esperado: ORA-20020 -> ORA-20020: La habitacion 1 no esta disponible del 2028-03-03 al 2028-03-06: se cruza con la reserva 72274.
+6c. INSERT ... SELECT de 2 filas solapadas   esperado: ORA-20020 -> ORA-20020: La habitacion 2 no esta disponible del 2028-05-01 al 2028-05-04: se cruza con la reserva 72276.
+6d. UPDATE de checkin a 2028-03-04           esperado: ORA-20020 -> ORA-20020: La habitacion 1 no esta disponible del 2028-03-04 al 2028-03-12: se cruza con la reserva 72274.
+6e. Checkin 2028-03-05 = checkout de 6b      esperado: aceptada  -> aceptada
+6f. Confirmada sobre la pendiente 72277      esperado: ORA-20020 -> ORA-20020: La habitacion 1 no esta disponible del 2028-07-03 al 2028-07-06: se cruza con la reserva 72277.
+6g. Cancelada sobre la pendiente 72277       esperado: aceptada  -> aceptada
+6h. Reactivar la cancelada 72279             esperado: ORA-20021 -> ORA-20021: No se puede reactivar la reserva 72279: la habitacion 1 ya esta ocupada del 2028-07-03 al 2028-07-06 por la reserva
+72277.
+
+Procedimiento PL/SQL terminado correctamente.
+
+TABLA                PARTICION  TABLESPACE_NAME            MB
+-------------------- ---------- ------------------ ----------
+RESERVA              P_ACTUAL   USERS              ,4
+RESERVA              P_2024     TS_RESERVAS_HIST   ,4
+RESERVA              P_2025     TS_RESERVAS_HIST   ,4
+RESERVA_HABITACION   P_ACTUAL   USERS              ,5
+RESERVA_HABITACION   P_2024     TS_RESERVAS_HIST   ,4
+RESERVA_HABITACION   P_2025     TS_RESERVAS_HIST   ,5
+
+6 filas seleccionadas.
+
+
+Explicado.
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------
+Plan hash value: 1395837308
+
+----------------------------------------------------------------------
+| Id  | Operation               | Name               | Pstart| Pstop |
+----------------------------------------------------------------------
+|   0 | SELECT STATEMENT        |                    |       |       |
+|   1 |  SORT AGGREGATE         |                    |       |       |
+|   2 |   PARTITION RANGE SINGLE|                    |     3 |     3 |
+|   3 |    TABLE ACCESS FULL    | RESERVA_HABITACION |     3 |     3 |
+----------------------------------------------------------------------
+
+10 filas seleccionadas.
+
+
+NOCHES_VISTA NOCHES_TABLAS RESUL
+------------ ------------- -----
+       78598         78598 OK
+
+1 fila seleccionada.
+
+
+MUNICIPIO    NOMBRE_COMERCIAL             HABITACIONES NOCHES_OCUPADAS NOCHES_DISPONIBLES PCT_OCUPACION
+------------ ---------------------------- ------------ --------------- ------------------ -------------
+Filandia     Finca Santa Barbara                     3              71                 93         76,34
+Montenegro   Glamping Cafe y Niebla                  5             114                155         73,55
+Armenia      Finca Las Heliconias                    3              67                 93         72,04
+Salento      Hostal Morelia                          7             154                217         70,97
+Salento      Glamping La Maizena                     5             110                155         70,97
+Salento      Finca La Rivera                         5             108                155         69,68
+Armenia      Hostal Los Guaduales                    6             129                186         69,35
+Salento      Glamping Santa Ana                      4              83                124         66,94
+Montenegro   Finca El Jardin                         4              83                124         66,94
+Salento      Glamping El Laurel                      6             115                186         61,83
+
+10 filas seleccionadas.
+
+
+ANIO_ME NOCHES_OCUPADAS NOCHES_DISPONIBLES PCT_OCUPACION
+------- --------------- ------------------ -------------
+2024-01            1939              18135         10,69
+2024-02             924              16965          5,45
+2024-03            1760              18135           9,7
+2024-04            1853              17550         10,56
+2024-05            1983              18135         10,93
+2024-06            3396              17550         19,35
+2024-07            4350              18135         23,99
+2024-08            1512              18135          8,34
+2024-09             921              17550          5,25
+2024-10            1197              18135           6,6
+2024-11            1652              17550          9,41
+2024-12            2899              18135         15,99
+2025-01            2433              18135         13,42
+2025-02             967              16380           5,9
+2025-03            1379              18135           7,6
+2025-04            2555              17550         14,56
+2025-05            1893              18135         10,44
+2025-06            3281              17550          18,7
+2025-07            4590              18135         25,31
+2025-08            1571              18135          8,66
+2025-09             995              17550          5,67
+2025-10            1465              18135          8,08
+2025-11            1878              17550          10,7
+2025-12            3518              18135          19,4
+2026-01            2833              18135         15,62
+2026-02             966              16380           5,9
+2026-03            1769              18135          9,75
+2026-04            2657              17550         15,14
+2026-05            2371              18135         13,07
+2026-06            3827              17550         21,81
+2026-07            5023              18135          27,7
+2026-08            1935              18135         10,67
+2026-09            1138              17550          6,48
+2026-10            1397              18135           7,7
+2026-11            1492              17550           8,5
+2026-12            2279              18135         12,57
+
+36 filas seleccionadas.
+
+Noches de feb-2028 en la vista ANTES del refresco:   el mes no existe
+Noches de feb-2028 en la vista DESPUES del refresco: 3 (esperado 3)
+Reserva de prueba eliminada y vista refrescada de nuevo.
+
+Procedimiento PL/SQL terminado correctamente.
+
+MVIEW_NAME             REFRESH_ ULTIMO_REFRESCO     STALENESS
+---------------------- -------- ------------------- ----------
+MV_OCUPACION_MENSUAL   COMPLETE 2026-10-25 23:00:01 FRESH
+
+1 fila seleccionada.
+

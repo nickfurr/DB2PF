@@ -1,9 +1,38 @@
 -- ENTREGA 2 - TurismoUQ
 -- 04. Pruebas de cada objeto. Ejecutar despues de 01, 02, 03a (SYSTEM) y 03b.
 --     Todo se deshace con ROLLBACK (la prueba 7f limpia lo que crea).
+--
+-- EVIDENCIA: la salida completa queda en evidencia_pruebas_entrega2.txt, en
+-- la carpeta del script (SQL Developer: F5; SQL*Plus: @04_pruebas.sql desde
+-- la carpeta entrega2). Correrlo sobre una base recien cargada:
+--   Reinicio_BD.sql -> entrega1 (DDL, Datos) -> entrega2 (01, 02, 03a, 03b, 04).
 
-SET SERVEROUTPUT ON
+-- Los mensajes de error se muestran solo con su primera linea (el codigo y
+-- el texto); se omite la pila ORA-06512 / ORA-04088 que Oracle agrega cuando
+-- el error viene de un disparador.
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
 SET LINESIZE 200
+SET PAGESIZE 200
+SET TRIMSPOOL ON
+SET FEEDBACK ON
+
+-- Formatos para que la salida se lea bien
+COLUMN descripcion         FORMAT A52
+COLUMN municipio           FORMAT A12
+COLUMN nombre_comercial    FORMAT A28
+COLUMN tabla               FORMAT A20
+COLUMN particion           FORMAT A10
+COLUMN tablespace_name     FORMAT A18
+COLUMN mview_name          FORMAT A22
+COLUMN staleness           FORMAT A10
+COLUMN plan_table_output   FORMAT A90
+
+SPOOL evidencia_pruebas_entrega2.txt
+
+SELECT 'Evidencia de pruebas Entrega 2 - TurismoUQ - ' ||
+       TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI') || ' - usuario ' || USER AS ejecucion
+  FROM dual;
 
 -- =============================================================================
 -- Prueba 1: fn_valor_estadia
@@ -79,7 +108,7 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE(RPAD(p_caso, 38) || ' -> SIN ERROR, valor ' || v_val || ' (no esperado)');
     EXCEPTION
         WHEN OTHERS THEN
-            DBMS_OUTPUT.PUT_LINE(RPAD(p_caso, 38) || ' -> ' || SQLERRM);
+            DBMS_OUTPUT.PUT_LINE(RPAD(p_caso, 38) || ' -> ' || REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 BEGIN
     SELECT h.id_habitacion INTO v_hab
@@ -109,7 +138,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE(RPAD('Temporada solapada (-20022)', 38) || ' -> SE ACEPTO (no esperado)');
     EXCEPTION
         WHEN OTHERS THEN
-            DBMS_OUTPUT.PUT_LINE(RPAD('Temporada solapada (-20022)', 38) || ' -> ' || SQLERRM);
+            DBMS_OUTPUT.PUT_LINE(RPAD('Temporada solapada (-20022)', 38) || ' -> ' || REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
     ROLLBACK;
 
@@ -189,7 +218,7 @@ DECLARE
         pkg_turismo.sp_crear_reserva(p_cli, p_hab, p_hue, p_in, p_out, v_res, p_freserva);
         DBMS_OUTPUT.PUT_LINE(p_caso || ' -> creada id=' || v_res);
     EXCEPTION
-        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE(p_caso || ' -> ' || SQLERRM);
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE(p_caso || ' -> ' || REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- busca un hueco libre en la habitacion 1
@@ -296,7 +325,7 @@ SELECT SUM(noches_ocupadas) AS noches_julio_2025_vista
 BEGIN
     pkg_turismo.sp_liquidacion_mensual(2025, 13);
 EXCEPTION
-    WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('4c. Mes 13 -> ' || SQLERRM);
+    WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('4c. Mes 13 -> ' || REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
 END;
 /
 
@@ -437,7 +466,7 @@ BEGIN
         VALUES (v_r1, v_ohab, v_oin, v_oout, 100000);
         resultado('6a. Cruce con la reserva confirmada ' || v_ores, 'ORA-20020', 'SE ACEPTO (error)');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6a. Cruce con la reserva confirmada ' || v_ores, 'ORA-20020', SQLERRM);
+        resultado('6a. Cruce con la reserva confirmada ' || v_ores, 'ORA-20020', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6b. Misma transaccion: la primera linea entra, la segunda choca con ella
@@ -449,7 +478,7 @@ BEGIN
         VALUES (v_r2, v_hab, DATE '2028-03-03', DATE '2028-03-06', 100000);
         resultado('6b. Segunda linea 2028-03-03 a 03-06', 'ORA-20020', 'SE ACEPTO (error)');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6b. Segunda linea 2028-03-03 a 03-06', 'ORA-20020', SQLERRM);
+        resultado('6b. Segunda linea 2028-03-03 a 03-06', 'ORA-20020', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6c. Una sola sentencia con dos filas que se cruzan entre si
@@ -460,7 +489,7 @@ BEGIN
         SELECT v_r3, v_hab2, DATE '2028-05-02', DATE '2028-05-06', 100000 FROM dual;
         resultado('6c. INSERT ... SELECT de 2 filas solapadas', 'ORA-20020', 'SE ACEPTO (error)');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6c. INSERT ... SELECT de 2 filas solapadas', 'ORA-20020', SQLERRM);
+        resultado('6c. INSERT ... SELECT de 2 filas solapadas', 'ORA-20020', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6d. UPDATE que mueve una linea libre encima de la de 6b
@@ -473,7 +502,7 @@ BEGIN
          WHERE id_reserva_habitacion = v_rh2;
         resultado('6d. UPDATE de checkin a 2028-03-04', 'ORA-20020', 'SE ACEPTO (error)');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6d. UPDATE de checkin a 2028-03-04', 'ORA-20020', SQLERRM);
+        resultado('6d. UPDATE de checkin a 2028-03-04', 'ORA-20020', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6e. Llega el mismo dia en que sale la reserva de 6b (03-05): no es solape
@@ -482,7 +511,7 @@ BEGIN
         VALUES (v_r3, v_hab, DATE '2028-03-05', DATE '2028-03-07', 100000);
         resultado('6e. Checkin 2028-03-05 = checkout de 6b', 'aceptada', 'aceptada');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6e. Checkin 2028-03-05 = checkout de 6b', 'aceptada', SQLERRM);
+        resultado('6e. Checkin 2028-03-05 = checkout de 6b', 'aceptada', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6f. pendiente ocupa, la confirmada no puede entrar
@@ -495,7 +524,7 @@ BEGIN
         VALUES (v_r5, v_hab, DATE '2028-07-03', DATE '2028-07-06', 100000);
         resultado('6f. Confirmada sobre la pendiente ' || v_r4, 'ORA-20020', 'SE ACEPTO (error)');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6f. Confirmada sobre la pendiente ' || v_r4, 'ORA-20020', SQLERRM);
+        resultado('6f. Confirmada sobre la pendiente ' || v_r4, 'ORA-20020', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6g. la cancelada no ocupa, entra sin problema
@@ -505,7 +534,7 @@ BEGIN
         VALUES (v_r6, v_hab, DATE '2028-07-03', DATE '2028-07-06', 100000);
         resultado('6g. Cancelada sobre la pendiente ' || v_r4, 'aceptada', 'aceptada');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6g. Cancelada sobre la pendiente ' || v_r4, 'aceptada', SQLERRM);
+        resultado('6g. Cancelada sobre la pendiente ' || v_r4, 'aceptada', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     -- 6h. se activa otra vez y choca con la pendiente
@@ -513,7 +542,7 @@ BEGIN
         UPDATE Reserva SET estado = 'confirmada' WHERE id_reserva = v_r6;
         resultado('6h. Reactivar la cancelada ' || v_r6, 'ORA-20021', 'SE ACEPTO (error)');
     EXCEPTION WHEN OTHERS THEN
-        resultado('6h. Reactivar la cancelada ' || v_r6, 'ORA-20021', SQLERRM);
+        resultado('6h. Reactivar la cancelada ' || v_r6, 'ORA-20021', REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
     END;
 
     ROLLBACK;
@@ -625,3 +654,5 @@ SELECT mview_name, refresh_method, TO_CHAR(last_refresh_date, 'YYYY-MM-DD HH24:M
        staleness
   FROM user_mviews
  WHERE mview_name = 'MV_OCUPACION_MENSUAL';
+
+SPOOL OFF
