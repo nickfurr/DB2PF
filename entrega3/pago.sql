@@ -1,4 +1,4 @@
-create or replace procedure pago (
+create or replace procedure sp_registrar_pago (
     p_monto   in  number,
     p_reserva in  reserva.id_reserva%type,
     p_metodo  in  pago.metodo%type,
@@ -78,6 +78,6 @@ exception
     when others then
         rollback to sp_pago_inicio;
         raise;
-end pago;
+end sp_registrar_pago;
 /
 
