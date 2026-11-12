@@ -82,7 +82,7 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
                t.nombre AS temporada,
                t.tipo,
                tar.valor_noche,
-               COUNT(t.id_temporada) OVER (PARTITION BY d.noche) AS n_temporadas
+               COUNT(t.id_temporada) OVER (PARTITION BY d.noche) AS n_temporadas --
           FROM (SELECT TRUNC(p_in) + LEVEL - 1 AS noche
                   FROM dual
                CONNECT BY LEVEL <= TRUNC(p_out) - TRUNC(p_in)) d
