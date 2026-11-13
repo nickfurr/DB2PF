@@ -253,11 +253,12 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
         IF v_cliente_existe = 0 THEN
             RAISE e_cliente_invalido;
         END IF;
-
+        -- aca hay que bloquear la tabla en transaccion------------------------------------------------
         SELECT capacidad
           INTO v_capacidad
           FROM Habitacion
-         WHERE id_habitacion = p_id_habitacion;
+         WHERE id_habitacion = p_id_habitacion
+         for update;
 
         IF p_cantidad_huespedes > v_capacidad THEN
             RAISE e_capacidad_excedida;
