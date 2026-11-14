@@ -4,7 +4,7 @@
 
 +
 
--- CONSULTA 2: reservas de una habitacion a\']=.p;l-ok0[uj89hy7got6f8r5ued4y/ partir de una fecha. Filtra por dos
+-- CONSULTA 2: reservas de una habitacion a partir de una fecha. Filtra por dos
 -- columnas, se resuelve con un indice COMPUESTO (id_habitacion, checkin).
 -- El orden importa: la columna lider (id_habitacion) va primero.
 -- Antes
