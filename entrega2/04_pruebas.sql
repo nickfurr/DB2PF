@@ -162,7 +162,7 @@ BEGIN
 END;
 /
 
--- Prueba 2: sp_crear_reserva, caso valido (busca una ventana libre).
+-- Prueba 2a: sp_crear_reserva (1 habitacion), caso valido (busca una ventana libre).
 -- como son fechas de 2025 se pasa p_fecha_reserva (30 dias antes), si no la
 -- toma como de hoy y sale -20016 (prueba 3g)
 DECLARE
@@ -188,10 +188,62 @@ BEGIN
     SELECT precio_noche_calculado INTO v_precio
       FROM Reserva_Habitacion WHERE id_reserva = v_res;
 
-    DBMS_OUTPUT.PUT_LINE('OK -> reserva creada id=' || v_res ||
+    DBMS_OUTPUT.PUT_LINE('OK (1 hab) -> reserva creada id=' || v_res ||
         ' (' || TO_CHAR(v_in, 'YYYY-MM-DD') || ' -> ' || TO_CHAR(v_in + 3, 'YYYY-MM-DD') ||
         '), precio por noche ' || v_precio ||
         ', estadia ' || pkg_turismo.fn_valor_estadia(1, v_in, v_in + 3));
+END;
+/
+ROLLBACK;
+
+-- Prueba 2b: sp_crear_reserva con VARIAS habitaciones del mismo alojamiento
+-- en una sola reserva (recomendacion de la Entrega 2). Una de las lineas llega
+-- un dia despues dentro del rango general, como permite el modelo (seccion 1.3).
+DECLARE
+    v_in     DATE;
+    v_res    Reserva.id_reserva%TYPE;
+    v_lineas pkg_turismo.t_lineas_habitacion := pkg_turismo.t_lineas_habitacion();
+    v_cnt    NUMBER;
+BEGIN
+    -- Ventana de 4 noches donde las habitaciones 1 y 2 del Hotel El Mirador esten libres
+    SELECT d INTO v_in FROM (
+        SELECT DATE '2025-02-01' + (LEVEL - 1) AS d
+          FROM dual CONNECT BY LEVEL <= 300
+    ) x
+    WHERE NOT EXISTS (
+        SELECT 1 FROM Reserva_Habitacion rh JOIN Reserva r ON r.id_reserva = rh.id_reserva
+         WHERE rh.id_habitacion IN (1, 2) AND r.estado <> 'cancelada'
+           AND x.d < rh.checkout AND x.d + 4 > rh.checkin)
+      AND ROWNUM = 1;
+
+    v_lineas.EXTEND(2);
+    v_lineas(1).id_habitacion      := 1;
+    v_lineas(1).cantidad_huespedes := 1;
+    v_lineas(1).checkin            := v_in;
+    v_lineas(1).checkout           := v_in + 4;
+
+    v_lineas(2).id_habitacion      := 2;
+    v_lineas(2).cantidad_huespedes := 2;
+    v_lineas(2).checkin            := v_in + 1;   -- llega un dia despues
+    v_lineas(2).checkout           := v_in + 4;
+
+    pkg_turismo.sp_crear_reserva(
+        p_id_cliente    => 1,
+        p_habitaciones  => v_lineas,
+        p_id_reserva    => v_res,
+        p_fecha_reserva => v_in - 15);
+
+    SELECT COUNT(*) INTO v_cnt FROM Reserva_Habitacion WHERE id_reserva = v_res;
+    DBMS_OUTPUT.PUT_LINE('OK (varias habs) -> reserva id=' || v_res ||
+                         ' con ' || v_cnt || ' lineas de habitacion:');
+    FOR r IN (SELECT id_habitacion, TO_CHAR(checkin, 'YYYY-MM-DD') AS ci,
+                     TO_CHAR(checkout, 'YYYY-MM-DD') AS co, precio_noche_calculado
+                FROM Reserva_Habitacion
+               WHERE id_reserva = v_res
+               ORDER BY id_habitacion) LOOP
+        DBMS_OUTPUT.PUT_LINE('   hab ' || r.id_habitacion || ': ' || r.ci || ' -> ' || r.co ||
+                             ', precio/noche=' || r.precio_noche_calculado);
+    END LOOP;
 END;
 /
 ROLLBACK;
@@ -206,12 +258,17 @@ ROLLBACK;
 --   3g -20016  checkin en el pasado
 --   3h -20017  cliente que no existe
 --   3i -20017  cliente nulo
+--   3k -20018  habitacion repetida en la misma reserva
+--   3l -20019  habitaciones de alojamientos distintos
 -- 3a a 3f con fecha de reserva 2025-01-01
 DECLARE
     c_freserva CONSTANT DATE := DATE '2025-01-01';
-    v_res Reserva.id_reserva%TYPE;
-    v_in  DATE;
-    v_pen Reserva.id_reserva%TYPE;
+    v_res    Reserva.id_reserva%TYPE;
+    v_in     DATE;
+    v_pen    Reserva.id_reserva%TYPE;
+    v_hab_otro Habitacion.id_habitacion%TYPE;
+    v_lineas pkg_turismo.t_lineas_habitacion;
+
     PROCEDURE intentar (p_caso VARCHAR2, p_hab NUMBER, p_hue NUMBER, p_in DATE, p_out DATE,
                         p_cli NUMBER DEFAULT 1, p_freserva DATE DEFAULT c_freserva) IS
     BEGIN
@@ -258,6 +315,32 @@ BEGIN
     intentar('3g pasado  ', 1, 1, DATE '2025-05-10', DATE '2025-05-13', 1, NULL);
     intentar('3h cliente ', 1, 1, DATE '2025-05-10', DATE '2025-05-13', 999999);
     intentar('3i cli nulo', 1, 1, DATE '2025-05-10', DATE '2025-05-13', NULL);
+
+    -- 3k. misma habitacion repetida dos veces en la misma reserva (-20018)
+    v_lineas := pkg_turismo.t_lineas_habitacion();
+    v_lineas.EXTEND(2);
+    v_lineas(1).id_habitacion := 1; v_lineas(1).cantidad_huespedes := 1;
+    v_lineas(1).checkin := DATE '2025-05-10'; v_lineas(1).checkout := DATE '2025-05-12';
+    v_lineas(2).id_habitacion := 1; v_lineas(2).cantidad_huespedes := 1;
+    v_lineas(2).checkin := DATE '2025-05-12'; v_lineas(2).checkout := DATE '2025-05-14';
+    BEGIN
+        pkg_turismo.sp_crear_reserva(1, v_lineas, v_res, c_freserva);
+        DBMS_OUTPUT.PUT_LINE('3k hab rep. -> creada id=' || v_res);
+    EXCEPTION
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('3k hab rep. -> ' || REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
+    END;
+
+    -- 3l. habitaciones de alojamientos distintos en la misma reserva (-20019)
+    SELECT MIN(id_habitacion) INTO v_hab_otro
+      FROM Habitacion
+     WHERE id_alojamiento <> (SELECT id_alojamiento FROM Habitacion WHERE id_habitacion = 1);
+    v_lineas(2).id_habitacion := v_hab_otro;
+    BEGIN
+        pkg_turismo.sp_crear_reserva(1, v_lineas, v_res, c_freserva);
+        DBMS_OUTPUT.PUT_LINE('3l dif aloj -> creada id=' || v_res);
+    EXCEPTION
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('3l dif aloj -> ' || REGEXP_SUBSTR(SQLERRM, '[^' || CHR(10) || ']+'));
+    END;
 END;
 /
 ROLLBACK;

@@ -9,7 +9,7 @@
 --     -20003  La habitacion no existe.
 --     -20005  La habitacion no tiene tarifa para la temporada de una noche.
 --     -20006  Una noche cae en dos temporadas (temporadas solapadas).
---   sp_crear_reserva
+--   sp_crear_reserva (una o varias habitaciones por reserva)
 --     -20010  habitacion ocupada en esas fechas
 --     -20011  checkout <= checkin
 --     -20012  mas huespedes que la capacidad
@@ -17,6 +17,8 @@
 --     -20014  huespedes en 0
 --     -20016  checkin antes de la fecha de reserva
 --     -20017  cliente nulo o que no existe
+--     -20018  lista de habitaciones vacia o habitacion repetida en la misma reserva
+--     -20019  habitaciones de alojamientos distintos en la misma reserva
 --   sp_liquidacion_mensual
 --     -20015  Ano o mes invalidos.
 
@@ -26,6 +28,16 @@ SET PAGESIZE 100
 
 -- Especificacion del paquete
 CREATE OR REPLACE PACKAGE pkg_turismo IS
+
+    -- Linea de habitacion para crear una reserva con una o varias habitaciones.
+    -- Cada linea puede tener su propio rango [checkin, checkout) dentro de la reserva.
+    TYPE t_linea_habitacion IS RECORD (
+        id_habitacion      Habitacion.id_habitacion%TYPE,
+        cantidad_huespedes NUMBER,
+        checkin            Reserva_Habitacion.checkin%TYPE,
+        checkout           Reserva_Habitacion.checkout%TYPE
+    );
+    TYPE t_lineas_habitacion IS TABLE OF t_linea_habitacion;
 
     -- Valor de una estadia: suma, noche por noche, la tarifa de la habitacion
     -- en la temporada a la que pertenece cada noche. La noche del checkout no
@@ -45,6 +57,17 @@ CREATE OR REPLACE PACKAGE pkg_turismo IS
         p_fecha_out     IN DATE
     );
 
+    -- Crea una reserva con una o varias habitaciones del mismo alojamiento en
+    -- una sola operacion atomica (sobrecarga para multiples habitaciones).
+    PROCEDURE sp_crear_reserva (
+        p_id_cliente    IN  Reserva.id_cliente%TYPE,
+        p_habitaciones  IN  t_lineas_habitacion,
+        p_id_reserva    OUT Reserva.id_reserva%TYPE,
+        p_fecha_reserva IN  Reserva.fecha_reserva%TYPE DEFAULT SYSDATE
+    );
+
+    -- Sobrecarga para crear una reserva de una sola habitacion (delega en la
+    -- version de multiples habitaciones).
     PROCEDURE sp_crear_reserva (
         p_id_cliente         IN  Reserva.id_cliente%TYPE,
         p_id_habitacion      IN  Habitacion.id_habitacion%TYPE,
@@ -202,49 +225,70 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
     END sp_desglose_estadia;
 
 
+    -- -------------------------------------------------------------------------
+    -- Crea una reserva de una o varias habitaciones en una sola operacion.
+    -- Si cualquiera de las habitaciones falla las validaciones, ROLLBACK TO
+    -- SAVEPOINT deshace tanto la cabecera en RESERVA como las lineas previas.
+    -- -------------------------------------------------------------------------
     PROCEDURE sp_crear_reserva (
-        p_id_cliente         IN  Reserva.id_cliente%TYPE,
-        p_id_habitacion      IN  Habitacion.id_habitacion%TYPE,
-        p_cantidad_huespedes IN  NUMBER,
-        p_checkin            IN  Reserva_Habitacion.checkin%TYPE,
-        p_checkout           IN  Reserva_Habitacion.checkout%TYPE,
-        p_id_reserva         OUT Reserva.id_reserva%TYPE,
-        p_fecha_reserva      IN  Reserva.fecha_reserva%TYPE DEFAULT SYSDATE
+        p_id_cliente    IN  Reserva.id_cliente%TYPE,
+        p_habitaciones  IN  t_lineas_habitacion,
+        p_id_reserva    OUT Reserva.id_reserva%TYPE,
+        p_fecha_reserva IN  Reserva.fecha_reserva%TYPE DEFAULT SYSDATE
     ) IS
-        -- sin hora, si no una salida a las 11am deja el dia ocupado pal siguiente
-        v_checkin            DATE := TRUNC(p_checkin);
-        v_checkout           DATE := TRUNC(p_checkout);
-        v_fecha_reserva      DATE := NVL(p_fecha_reserva, SYSDATE);
-        v_capacidad          Habitacion.capacidad%TYPE;
-        v_cliente_existe     NUMBER;
-        v_habitacion_ocupada NUMBER;
-        v_precio_noche       Reserva_Habitacion.precio_noche_calculado%TYPE;
+        v_checkin             DATE;
+        v_checkout            DATE;
+        v_fecha_reserva       DATE := NVL(p_fecha_reserva, SYSDATE);
+        v_capacidad           Habitacion.capacidad%TYPE;
+        v_alojamiento_hab     Habitacion.id_alojamiento%TYPE;
+        v_alojamiento_reserva Habitacion.id_alojamiento%TYPE := NULL;
+        v_cliente_existe      NUMBER;
+        v_habitacion_ocupada  NUMBER;
+        v_precio_noche        Reserva_Habitacion.precio_noche_calculado%TYPE;
 
-        e_checkout_invalido  EXCEPTION;
-        e_checkin_pasado     EXCEPTION;
-        e_capacidad_excedida EXCEPTION;
-        e_cantidad_invalida  EXCEPTION;
-        e_cliente_invalido   EXCEPTION;
-        e_no_disponible      EXCEPTION;
+        e_checkout_invalido    EXCEPTION;
+        e_checkin_pasado       EXCEPTION;
+        e_capacidad_excedida   EXCEPTION;
+        e_cantidad_invalida    EXCEPTION;
+        e_cliente_invalido     EXCEPTION;
+        e_no_disponible        EXCEPTION;
+        e_lista_invalida       EXCEPTION;
+        e_alojamiento_distinto EXCEPTION;
     BEGIN
         SAVEPOINT sp_crear_reserva_inicio;
 
-        IF v_checkin IS NULL OR v_checkout IS NULL OR v_checkout <= v_checkin THEN
-            RAISE e_checkout_invalido;
+        IF p_habitaciones IS NULL OR p_habitaciones.COUNT = 0 THEN
+            RAISE e_lista_invalida;
         END IF;
 
-        -- no se puede reservar para atras. p_fecha_reserva es pa meter reservas
-        -- viejas, las pruebas lo usan
-        IF v_checkin < TRUNC(v_fecha_reserva) THEN
-            RAISE e_checkin_pasado;
-        END IF;
+        -- 1. Validaciones de parametros de cada linea y que no se repita la
+        --    misma habitacion dentro de la misma reserva.
+        FOR i IN 1 .. p_habitaciones.COUNT LOOP
+            v_checkin  := TRUNC(p_habitaciones(i).checkin);
+            v_checkout := TRUNC(p_habitaciones(i).checkout);
 
-        IF p_cantidad_huespedes IS NULL OR p_cantidad_huespedes <= 0 THEN
-            RAISE e_cantidad_invalida;
-        END IF;
+            IF v_checkin IS NULL OR v_checkout IS NULL OR v_checkout <= v_checkin THEN
+                RAISE e_checkout_invalido;
+            END IF;
 
-        -- se valida aca porque si no el insert revienta con error de oracle
-        -- (ORA-02291) y no con uno propio
+            -- no se puede reservar para atras. p_fecha_reserva es pa meter reservas
+            -- viejas, las pruebas lo usan
+            IF v_checkin < TRUNC(v_fecha_reserva) THEN
+                RAISE e_checkin_pasado;
+            END IF;
+
+            IF p_habitaciones(i).cantidad_huespedes IS NULL OR p_habitaciones(i).cantidad_huespedes <= 0 THEN
+                RAISE e_cantidad_invalida;
+            END IF;
+
+            FOR j IN 1 .. i - 1 LOOP
+                IF p_habitaciones(j).id_habitacion = p_habitaciones(i).id_habitacion THEN
+                    RAISE e_lista_invalida;
+                END IF;
+            END LOOP;
+        END LOOP;
+
+        -- 2. Validar que el cliente exista (evita ORA-02291).
         SELECT COUNT(*)
           INTO v_cliente_existe
           FROM Cliente
@@ -254,42 +298,61 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
             RAISE e_cliente_invalido;
         END IF;
 
-        SELECT capacidad
-          INTO v_capacidad
-          FROM Habitacion
-         WHERE id_habitacion = p_id_habitacion;
+        -- 3. Validar cada habitacion: existencia, mismo alojamiento, capacidad
+        --    y disponibilidad en las fechas solicitadas.
+        FOR i IN 1 .. p_habitaciones.COUNT LOOP
+            v_checkin  := TRUNC(p_habitaciones(i).checkin);
+            v_checkout := TRUNC(p_habitaciones(i).checkout);
 
-        IF p_cantidad_huespedes > v_capacidad THEN
-            RAISE e_capacidad_excedida;
-        END IF;
+            SELECT capacidad, id_alojamiento
+              INTO v_capacidad, v_alojamiento_hab
+              FROM Habitacion
+             WHERE id_habitacion = p_habitaciones(i).id_habitacion;
 
-        -- ocupa todo lo que no este cancelado, igual que en trg_reserva_no_solape
-        SELECT COUNT(*)
-          INTO v_habitacion_ocupada
-          FROM Reserva_Habitacion rh
-          JOIN Reserva r ON r.id_reserva = rh.id_reserva
-         WHERE rh.id_habitacion = p_id_habitacion
-           AND r.estado <> 'cancelada'
-           AND rh.checkin  < v_checkout
-           AND rh.checkout > v_checkin;
+            IF v_alojamiento_reserva IS NULL THEN
+                v_alojamiento_reserva := v_alojamiento_hab;
+            ELSIF v_alojamiento_hab <> v_alojamiento_reserva THEN
+                RAISE e_alojamiento_distinto;
+            END IF;
 
-        IF v_habitacion_ocupada > 0 THEN
-            RAISE e_no_disponible;
-        END IF;
+            IF p_habitaciones(i).cantidad_huespedes > v_capacidad THEN
+                RAISE e_capacidad_excedida;
+            END IF;
 
-        -- promedio por noche redondeado a 2, como en ScriptDatos
-        v_precio_noche := ROUND(fn_valor_estadia(p_id_habitacion, v_checkin, v_checkout)
-                                / (v_checkout - v_checkin), 2);
+            -- ocupa todo lo que no este cancelado, igual que en trg_reserva_no_solape
+            SELECT COUNT(*)
+              INTO v_habitacion_ocupada
+              FROM Reserva_Habitacion rh
+              JOIN Reserva r ON r.id_reserva = rh.id_reserva
+             WHERE rh.id_habitacion = p_habitaciones(i).id_habitacion
+               AND r.estado <> 'cancelada'
+               AND rh.checkin  < v_checkout
+               AND rh.checkout > v_checkin;
 
+            IF v_habitacion_ocupada > 0 THEN
+                RAISE e_no_disponible;
+            END IF;
+        END LOOP;
+
+        -- 4. Insertar la cabecera de la reserva y todas sus lineas de habitacion.
         INSERT INTO Reserva (id_cliente, fecha_reserva, estado)
         VALUES (p_id_cliente, v_fecha_reserva, 'confirmada')
         RETURNING id_reserva INTO p_id_reserva;
 
-        INSERT INTO Reserva_Habitacion (
-            id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado
-        ) VALUES (
-            p_id_reserva, p_id_habitacion, v_checkin, v_checkout, v_precio_noche
-        );
+        FOR i IN 1 .. p_habitaciones.COUNT LOOP
+            v_checkin  := TRUNC(p_habitaciones(i).checkin);
+            v_checkout := TRUNC(p_habitaciones(i).checkout);
+
+            -- promedio por noche redondeado a 2, como en ScriptDatos
+            v_precio_noche := ROUND(fn_valor_estadia(p_habitaciones(i).id_habitacion, v_checkin, v_checkout)
+                                    / (v_checkout - v_checkin), 2);
+
+            INSERT INTO Reserva_Habitacion (
+                id_reserva, id_habitacion, checkin, checkout, precio_noche_calculado
+            ) VALUES (
+                p_id_reserva, p_habitaciones(i).id_habitacion, v_checkin, v_checkout, v_precio_noche
+            );
+        END LOOP;
     EXCEPTION
         WHEN e_no_disponible THEN
             ROLLBACK TO sp_crear_reserva_inicio;
@@ -311,12 +374,46 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
         WHEN e_cliente_invalido THEN
             ROLLBACK TO sp_crear_reserva_inicio;
             RAISE_APPLICATION_ERROR(-20017, 'El cliente ' || NVL(TO_CHAR(p_id_cliente), '(nulo)') || ' no existe.');
+        WHEN e_lista_invalida THEN
+            ROLLBACK TO sp_crear_reserva_inicio;
+            RAISE_APPLICATION_ERROR(-20018, 'La reserva debe incluir al menos una habitacion y sin repetir la misma habitacion.');
+        WHEN e_alojamiento_distinto THEN
+            ROLLBACK TO sp_crear_reserva_inicio;
+            RAISE_APPLICATION_ERROR(-20019, 'Todas las habitaciones de una misma reserva deben pertenecer al mismo alojamiento.');
         WHEN NO_DATA_FOUND THEN
             ROLLBACK TO sp_crear_reserva_inicio;
             RAISE_APPLICATION_ERROR(-20013, 'La habitacion indicada no existe.');
         WHEN OTHERS THEN
             ROLLBACK TO sp_crear_reserva_inicio;
             RAISE;
+    END sp_crear_reserva;
+
+
+    -- Sobrecarga de una sola habitacion: construye una lista de 1 elemento y
+    -- delega en la version de multiples habitaciones.
+    PROCEDURE sp_crear_reserva (
+        p_id_cliente         IN  Reserva.id_cliente%TYPE,
+        p_id_habitacion      IN  Habitacion.id_habitacion%TYPE,
+        p_cantidad_huespedes IN  NUMBER,
+        p_checkin            IN  Reserva_Habitacion.checkin%TYPE,
+        p_checkout           IN  Reserva_Habitacion.checkout%TYPE,
+        p_id_reserva         OUT Reserva.id_reserva%TYPE,
+        p_fecha_reserva      IN  Reserva.fecha_reserva%TYPE DEFAULT SYSDATE
+    ) IS
+        v_lineas t_lineas_habitacion := t_lineas_habitacion();
+    BEGIN
+        v_lineas.EXTEND;
+        v_lineas(1).id_habitacion      := p_id_habitacion;
+        v_lineas(1).cantidad_huespedes := p_cantidad_huespedes;
+        v_lineas(1).checkin            := p_checkin;
+        v_lineas(1).checkout           := p_checkout;
+
+        sp_crear_reserva(
+            p_id_cliente    => p_id_cliente,
+            p_habitaciones  => v_lineas,
+            p_id_reserva    => p_id_reserva,
+            p_fecha_reserva => p_fecha_reserva
+        );
     END sp_crear_reserva;
 
 
