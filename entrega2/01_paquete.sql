@@ -105,7 +105,7 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
                t.nombre AS temporada,
                t.tipo,
                tar.valor_noche,
-               COUNT(t.id_temporada) OVER (PARTITION BY d.noche) AS n_temporadas
+               COUNT(t.id_temporada) OVER (PARTITION BY d.noche) AS n_temporadas --
           FROM (SELECT TRUNC(p_in) + LEVEL - 1 AS noche
                   FROM dual
                CONNECT BY LEVEL <= TRUNC(p_out) - TRUNC(p_in)) d
@@ -298,16 +298,10 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
             RAISE e_cliente_invalido;
         END IF;
 
-        -- 3. Validar cada habitacion: existencia, mismo alojamiento, capacidad
-        --    y disponibilidad en las fechas solicitadas.
-        FOR i IN 1 .. p_habitaciones.COUNT LOOP
-            v_checkin  := TRUNC(p_habitaciones(i).checkin);
-            v_checkout := TRUNC(p_habitaciones(i).checkout);
-
-            SELECT capacidad, id_alojamiento
-              INTO v_capacidad, v_alojamiento_hab
-              FROM Habitacion
-             WHERE id_habitacion = p_habitaciones(i).id_habitacion;
+        SELECT capacidad
+          INTO v_capacidad
+          FROM Habitacion
+         WHERE id_habitacion = p_id_habitacion;
 
             IF v_alojamiento_reserva IS NULL THEN
                 v_alojamiento_reserva := v_alojamiento_hab;
