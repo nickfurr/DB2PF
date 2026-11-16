@@ -3,23 +3,20 @@
 -- 03. Indices y planes de ejecucion (3 consultas lentas + caso donde no ayuda).
 -- Ejecutar con F5 en SQL Developer conectado con el usuario del proyecto.
 -- =============================================================================
-   SET LINESIZE 250
+SET LINESIZE 250
 SET PAGESIZE 100
 COLUMN plan_table_output FORMAT A150
 
--- Limpieza previa opcional (por si los indices ya existian de una corrida anterior)
-begin
-   for i in (
-      select index_name
-        from user_indexes
-       where index_name in ( 'IDX_RH_HABITACION',
-                             'IDX_RH_HAB_CHECKIN',
-                             'FX_RH_ANIO',
-                             'IDX_RESERVA_ESTADO' )
-   ) loop
-      execute immediate 'DROP INDEX ' || i.index_name;
-   end loop;
-end;
+-- Limpieza previa (por si los indices ya existian de una corrida anterior)
+BEGIN
+    FOR i IN (SELECT index_name
+                FROM user_indexes
+               WHERE index_name IN ('IDX_RH_HABITACION', 'IDX_RH_HAB_CHECKIN',
+                                    'FX_RH_MES_DIA', 'FX_RH_ANIO',
+                                    'FX_CLIENTE_CORREO_UPPER', 'IDX_RESERVA_ESTADO')) LOOP
+        EXECUTE IMMEDIATE 'DROP INDEX ' || i.index_name;
+    END LOOP;
+END;
 /
 
 -- -----------------------------------------------------------------------------
@@ -27,37 +24,24 @@ end;
 -- foranea sin indice automatico en Oracle). Sin indice obliga a recorrer toda
 -- la tabla Reserva_Habitacion; con idx_rh_habitacion pasa a INDEX RANGE SCAN.
 -- -----------------------------------------------------------------------------
-pro    === CONSULTA 1 (ANTES): Busqueda por id_habitacion sin indice ===
-explain plan
-   for
-select id_reserva,
-       checkin,
-       checkout,
-       precio_noche_calculado
-  from reserva_habitacion
- where id_habitacion = 150;
+PROMPT === CONSULTA 1 (ANTES): Busqueda por id_habitacion sin indice ===
+EXPLAIN PLAN FOR
+SELECT id_reserva, checkin, checkout, precio_noche_calculado
+  FROM Reserva_Habitacion
+ WHERE id_habitacion = 150;
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- Indice sobre llave foranea
-create index idx_rh_habitacion on
-   reserva_habitacion (
-      id_habitacion
-   );
+CREATE INDEX idx_rh_habitacion ON Reserva_Habitacion (id_habitacion);
 
-pro    === CONSULTA 1 (DESPUES): Con indice B-Tree idx_rh_habitacion ===
-explain plan
-   for
-select id_reserva,
-       checkin,
-       checkout,
-       precio_noche_calculado
-  from reserva_habitacion
- where id_habitacion = 150;
+PROMPT === CONSULTA 1 (DESPUES): Con indice B-Tree idx_rh_habitacion ===
+EXPLAIN PLAN FOR
+SELECT id_reserva, checkin, checkout, precio_noche_calculado
+  FROM Reserva_Habitacion
+ WHERE id_habitacion = 150;
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- -----------------------------------------------------------------------------
 -- CONSULTA 2: reservas de una habitacion a partir de una fecha. Filtra por dos
@@ -65,114 +49,88 @@ select *
 -- El orden importa: la columna lider (id_habitacion) va primero.
 -- -----------------------------------------------------------------------------
 -- Se borra el indice simple anterior para medir el efecto limpio del compuesto
-drop index idx_rh_habitacion;
+DROP INDEX idx_rh_habitacion;
 
-pro    === CONSULTA 2 (ANTES): Filtro por habitacion y fecha sin indice ===
-explain plan
-   for
-select *
-  from reserva_habitacion
- where id_habitacion = 150
-   and checkin >= date '2025-06-01';
+PROMPT === CONSULTA 2 (ANTES): Filtro por habitacion y fecha sin indice ===
+EXPLAIN PLAN FOR
+SELECT *
+  FROM Reserva_Habitacion
+ WHERE id_habitacion = 150
+   AND checkin >= DATE '2025-06-01';
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- Indice compuesto
-create index idx_rh_hab_checkin on
-   reserva_habitacion (
-      id_habitacion,
-      checkin
-   );
+CREATE INDEX idx_rh_hab_checkin ON Reserva_Habitacion (id_habitacion, checkin);
 
-pro    === CONSULTA 2 (DESPUES): Con indice compuesto idx_rh_hab_checkin ===
-explain plan
-   for
-select *
-  from reserva_habitacion
- where id_habitacion = 150
-   and checkin >= date '2025-06-01';
+PROMPT === CONSULTA 2 (DESPUES): Con indice compuesto idx_rh_hab_checkin ===
+EXPLAIN PLAN FOR
+SELECT *
+  FROM Reserva_Habitacion
+ WHERE id_habitacion = 150
+   AND checkin >= DATE '2025-06-01';
 
-select *
-  from table ( dbms_xplan.display );
-
--- Recrear tambien idx_rh_habitacion si se desea conservar o dejar el compuesto
--- (idx_rh_hab_checkin ya cubre busquedas por id_habitacion porque es columna lider)
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- -----------------------------------------------------------------------------
--- CONSULTA 3: reservas de un ano. EXTRACT(YEAR FROM checkin) es una funcion
--- sobre la columna, por eso un indice normal sobre checkin no sirve. Se crea un
--- indice FUNCIONAL sobre la misma expresion del WHERE.
+-- CONSULTA 3: busqueda de un cliente por correo sin importar mayusculas o
+-- minusculas. Aunque Cliente.correo tiene un indice UNIQUE normal, al aplicarle
+-- la funcion UPPER(correo) en el WHERE el indice normal queda inservible y
+-- Oracle hace TABLE ACCESS FULL sobre los 3.000 clientes. Se resuelve creando
+-- un indice BASADO EN FUNCION sobre UPPER(correo).
 -- -----------------------------------------------------------------------------
-pro    === CONSULTA 3 (ANTES): Filtro con EXTRACT(YEAR FROM checkin) sin indice funcional ===
-explain plan
-   for
-select *
-  from reserva_habitacion
- where extract(year from checkin) = 2025;
+PROMPT === CONSULTA 3 (ANTES): Busqueda con UPPER(correo) sin indice basado en funcion ===
+EXPLAIN PLAN FOR
+SELECT id_cliente, nombre, documento_identidad, correo, telefono
+  FROM Cliente
+ WHERE UPPER(correo) = 'CARLOS.RAMIREZ1@CORREO.COM';
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
--- Indice funcional sobre la expresion
-create index fx_rh_anio on
-   reserva_habitacion ( extract(year from
-      checkin
-   ) );
+-- Indice basado en funcion sobre UPPER(correo)
+CREATE INDEX fx_cliente_correo_upper ON Cliente (UPPER(correo));
 
-pro    === CONSULTA 3 (DESPUES): Con indice basado en funcion fx_rh_anio ===
-explain plan
-   for
-select *
-  from reserva_habitacion
- where extract(year from checkin) = 2025;
+PROMPT === CONSULTA 3 (DESPUES): Con indice basado en funcion fx_cliente_correo_upper ===
+EXPLAIN PLAN FOR
+SELECT id_cliente, nombre, documento_identidad, correo, telefono
+  FROM Cliente
+ WHERE UPPER(correo) = 'CARLOS.RAMIREZ1@CORREO.COM';
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- -----------------------------------------------------------------------------
--- CASO DONDE EL INDICE NO AYUDA: filtrar Reserva por estado.
--- 'estado' tiene muy pocos valores distintos (4) y 'confirmada' devuelve cerca
--- de un tercio de la tabla. Leer esa fraccion por indice, fila por fila y
--- saltando al ROWID, cuesta mas que leer la tabla de corrido, asi que el
--- optimizador IGNORA el indice y se queda en TABLE ACCESS FULL. Es baja
--- selectividad: un indice solo ayuda cuando devuelve pocas filas por valor.
+-- CASO DONDE EL INDICE NO AYUDA: filtrar Reserva por estado = 'completada'.
+-- 'estado' tiene solo 4 valores distintos y 'completada' devuelve mas del 70 %
+-- de las 25.000 reservas. Leer esa cantidad de filas por indice saltando al
+-- ROWID bloque por bloque cuesta mucho mas que leer la tabla de corrido, asi
+-- que el optimizador IGNORA el indice y mantiene TABLE ACCESS FULL.
 -- -----------------------------------------------------------------------------
-pro    === CASO DONDE NO AYUDA (ANTES): Filtro por estado = confirmada sin indice ===
-explain plan
-   for
-select *
-  from reserva
- where estado = 'confirmada';
+PROMPT === CASO DONDE NO AYUDA (ANTES): Filtro por estado = completada sin indice ===
+EXPLAIN PLAN FOR
+SELECT *
+  FROM Reserva
+ WHERE estado = 'completada';
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
-create index idx_reserva_estado on
-   reserva (
-      estado
-   );
+CREATE INDEX idx_reserva_estado ON Reserva (estado);
+EXEC DBMS_STATS.GATHER_TABLE_STATS(USER, 'RESERVA', cascade => TRUE);
 
-pro    === CASO DONDE NO AYUDA (DESPUES): Con idx_reserva_estado (sigue en TABLE ACCESS FULL) ===
-explain plan
-   for
-select *
-  from reserva
- where estado = 'confirmada';
+PROMPT === CASO DONDE NO AYUDA (DESPUES): Con idx_reserva_estado (sigue en TABLE ACCESS FULL) ===
+EXPLAIN PLAN FOR
+SELECT *
+  FROM Reserva
+ WHERE estado = 'completada';
 
-select *
-  from table ( dbms_xplan.display );
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- Ver los indices creados
-select index_name,
-       index_type,
-       uniqueness
-  from user_indexes
- where table_name in ( 'RESERVA_HABITACION',
-                       'RESERVA' )
- order by index_name;
+SELECT table_name, index_name, index_type, uniqueness
+  FROM user_indexes
+ WHERE table_name IN ('RESERVA_HABITACION', 'CLIENTE', 'RESERVA')
+ ORDER BY table_name, index_name;
 
 -- Limpieza (para volver a ejecutar en limpio):
 -- DROP INDEX idx_rh_hab_checkin;
--- DROP INDEX fx_rh_anio;
+-- DROP INDEX fx_cliente_correo_upper;
 -- DROP INDEX idx_reserva_estado;

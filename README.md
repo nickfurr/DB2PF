@@ -30,13 +30,14 @@ DB2PF/
 │   ├── 04_pruebas.sql                       Pruebas de cada objeto; genera la evidencia
 │   └── evidencia_pruebas_entrega2.txt       Salida de las pruebas (la crea 04_pruebas.sql)
 └── entrega3/                                Entrega 3 · Transacciones, concurrencia, índices y seguridad
-    ├── pago.sql                             Procedimiento sp_registrar_pago (validaciones + FOR UPDATE)
-    ├── reserva.sql                          Procedimiento atómico sp_reservar_y_pagar (SAVEPOINT)
-    ├── pruebas_transacciones.sql            Pruebas de éxito atómico, fallo atómico y rollback parcial
+    ├── 01a_pago.sql                         Procedimiento sp_registrar_pago (validaciones + FOR UPDATE)
+    ├── 01b_reserva.sql                      Procedimiento atómico sp_reservar_y_pagar (SAVEPOINT)
+    ├── 01c_pruebas_transacciones.sql        Pruebas de éxito atómico, fallo atómico y rollback parcial
     ├── 03_indices.sql                       3 consultas (FK, compuesto, funcional) + caso donde no ayuda
+    ├── imagenes_indices/                    Capturas de los planes de ejecución de 03_indices.sql
     ├── 04a_seguridad_system.sql             Perfil, 4 roles y 4 usuarios (se ejecuta como SYSTEM)
     ├── 04b_seguridad_esquema.sql            Vistas de recepción y GRANT a los 4 roles
-    └── experimentoConcurrencia/             Experimento en 2 sesiones (concurrencia.sql + PDF con capturas)
+    └── experimentoConcurrencia/             Experimento en 2 sesiones (02_concurrencia.sql + PDF con capturas)
 ```
 
 ## Orden completo de ejecución
@@ -58,9 +59,9 @@ En SQL Developer, cada script se ejecuta como script (`F5`).
 | 7 | `entrega2/02_disparadores.sql` | proyecto | Crea los disparadores de auditoría, solape de reservas, reactivación y solape de temporadas. |
 | 8 | `entrega2/03b_historico_vista_materializada.sql` | proyecto | Particiona `Reserva` y `Reserva_Habitacion` llevando 2024 y 2025 a `TS_RESERVAS_HIST` y crea `mv_ocupacion_mensual`. |
 | 9 | `entrega2/04_pruebas.sql` | proyecto | Ejecuta la batería de pruebas de la Entrega 2 y guarda la salida en `evidencia_pruebas_entrega2.txt`. |
-| 10 | `entrega3/pago.sql` | proyecto | Compila `sp_registrar_pago`. |
-| 11 | `entrega3/reserva.sql` | proyecto | Compila `sp_reservar_y_pagar` (transacción atómica con `SAVEPOINT`). |
-| 12 | `entrega3/pruebas_transacciones.sql` | proyecto | Prueba éxito atómico, fallo atómico y rollback parcial con `SAVEPOINT`. |
+| 10 | `entrega3/01a_pago.sql` | proyecto | Compila `sp_registrar_pago`. |
+| 11 | `entrega3/01b_reserva.sql` | proyecto | Compila `sp_reservar_y_pagar` (transacción atómica con `SAVEPOINT`). |
+| 12 | `entrega3/01c_pruebas_transacciones.sql` | proyecto | Prueba éxito atómico, fallo atómico y rollback parcial con `SAVEPOINT`. |
 | 13 | `entrega3/03_indices.sql` | proyecto | Crea los 3 índices (FK, compuesto y funcional), el índice de baja selectividad y muestra los `EXPLAIN PLAN`. |
 | 14 | `entrega3/04a_seguridad_system.sql` | **`SYSTEM`** | Crea `perfil_recepcion`, los 4 roles y los 4 usuarios de prueba. |
 | 15 | `entrega3/04b_seguridad_esquema.sql` | proyecto | Crea las vistas de recepción y otorga los `GRANT` diferenciados a los 4 roles. |
@@ -98,7 +99,7 @@ Los datos salen de un generador con semilla fija: cada carga produce exactamente
 
 | Requisito | Objeto / Archivo |
 |---|---|
-| Transacción atómica + `SAVEPOINT` | `sp_registrar_pago` (`pago.sql`), `sp_reservar_y_pagar` (`reserva.sql`) y `pruebas_transacciones.sql` |
-| Concurrencia (2 sesiones + `FOR UPDATE`) | `experimentoConcurrencia/concurrencia.sql` y `DOCUMENTO_CONCURRENCIA.pdf` |
+| Transacción atómica + `SAVEPOINT` | `sp_registrar_pago` (`01a_pago.sql`), `sp_reservar_y_pagar` (`01b_reserva.sql`) y `01c_pruebas_transacciones.sql` |
+| Concurrencia (2 sesiones + `FOR UPDATE`) | `experimentoConcurrencia/02_concurrencia.sql` y `DOCUMENTO_CONCURRENCIA.pdf` |
 | Índices (3 consultas + caso donde no ayuda) | `03_indices.sql`: `idx_rh_habitacion` (FK), `idx_rh_hab_checkin` (compuesto), `fx_rh_anio` (funcional) e `idx_reserva_estado` (baja selectividad) |
 | Seguridad (4 roles, vistas y perfil) | `04a_seguridad_system.sql` y `04b_seguridad_esquema.sql`: `perfil_recepcion`, `rol_recepcion` (solo vistas + procedimientos), `rol_admin_aloj`, `rol_gerente` y `rol_auditor` |
