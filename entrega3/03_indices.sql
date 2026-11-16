@@ -3,9 +3,9 @@
 -- 03. Indices y planes de ejecucion (3 consultas lentas + caso donde no ayuda).
 -- Ejecutar con F5 en SQL Developer conectado con el usuario del proyecto.
 -- =============================================================================
-   SET LINESIZE 200
+   SET LINESIZE 250
 SET PAGESIZE 100
-COLUMN plan_table_output FORMAT A110
+COLUMN plan_table_output FORMAT A150
 
 -- Limpieza previa opcional (por si los indices ya existian de una corrida anterior)
 begin
