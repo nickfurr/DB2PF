@@ -1,13 +1,9 @@
-
-\drs
 -- ENTREGA 3 - TurismoUQ
-
-+
-
 -- CONSULTA 2: reservas de una habitacion a partir de una fecha. Filtra por dos
 -- columnas, se resuelve con un indice COMPUESTO (id_habitacion, checkin).
 -- El orden importa: la columna lider (id_habitacion) va primero.
 -- Antes
+
 EXPLAIN PLAN FOR
 SELECT *
 FROM Reserva_Habitacion
