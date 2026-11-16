@@ -298,10 +298,19 @@ CREATE OR REPLACE PACKAGE BODY pkg_turismo IS
             RAISE e_cliente_invalido;
         END IF;
 
-        SELECT capacidad
-          INTO v_capacidad
-          FROM Habitacion
-         WHERE id_habitacion = p_id_habitacion;
+        -- 3. Validar cada habitacion: existencia, mismo alojamiento, capacidad
+        --    y disponibilidad en las fechas solicitadas.
+        FOR i IN 1 .. p_habitaciones.COUNT LOOP
+            v_checkin  := TRUNC(p_habitaciones(i).checkin);
+            v_checkout := TRUNC(p_habitaciones(i).checkout);
+
+            -- Bloqueo pesimista (FOR UPDATE) para serializar reservas concurrentes
+            -- sobre la misma habitacion.
+            SELECT capacidad, id_alojamiento
+              INTO v_capacidad, v_alojamiento_hab
+              FROM Habitacion
+             WHERE id_habitacion = p_habitaciones(i).id_habitacion
+               FOR UPDATE;
 
             IF v_alojamiento_reserva IS NULL THEN
                 v_alojamiento_reserva := v_alojamiento_hab;

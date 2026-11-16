@@ -1,3 +1,7 @@
+drop procedure sp_reservar_y_pagar;
+drop procedure sp_registrar_pago;
+drop view v_recepcion_reservas;
+drop view v_recepcion_habitaciones;
 drop materialized view mv_ocupacion_mensual;
 drop package pkg_turismo;
 drop table auditoria_tarifa cascade constraints purge;
